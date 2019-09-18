@@ -1,0 +1,5 @@
+__pycache__
+env
+tmp.txt
+.DS_STORE
+trials

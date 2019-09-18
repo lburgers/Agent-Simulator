@@ -1,0 +1,32 @@
+BasicGame
+    SpriteSet
+        floor > Immovable hidden=True img=oryx/backBiege
+        wall > Immovable img=oryx/wall2
+        avatar > MovingAvatar img=oryx/yeti1
+        goat > CustomNPC
+            angry  > img=newset/piranha2
+            scared > img=newset/piranha2
+        A > Immovable img=newset/blockR
+        B > Immovable img=newset/blockG
+        C > Immovable img=newset/blockT
+
+
+    InteractionSet
+        goat   wall   > stepBack
+        avatar wall   > stepBack
+        scared avatar  > killSprite scoreChange=1
+        avatar angry  > killSprite scoreChange=-1
+
+    LevelMapping
+        0 > floor scared
+        1 > floor angry
+        X > floor A
+        Y > floor B
+        Z > floor C
+        . > floor
+        A > floor avatar
+        w > wall
+
+    TerminationSet
+        SpriteCounter stype=goat win=True
+        SpriteCounter stype=avatar win=False
