@@ -81,7 +81,7 @@ def make_sprite(agent_type='search', search_goal='avatar', search_type='avoid',
 def build_map(levelfile):
     builder = BuildLevel(levelfile)
     builder.add(20,5, 'A') # Add an avatar to the map at (x, y)
-    builder.add(18,2, '0') # Add a friendly (reward +1) NPC to the map
+    builder.add(20,13, '0') # Add a friendly (reward +1) NPC to the map
     # builder.add(11,9, '1') # Add a dangerous (reward -1) NPC to the map
     builder.add(20,21, 'Z') # Add a GOAL to the map
     # builder.add(1,9, 'Y') # Add a GOAL to the map
@@ -129,7 +129,7 @@ def main():
 
     # TODO: add code for making multiple sprites and adding them to game.txt
     # TODO: add rewards (friendly/unfriendly)
-    true_sprite_params = ('search', 'avatar', 'approach', 'stationary', 25, False, True, False)
+    true_sprite_params = ('search', 'avatar', 'approach', 'home', 25, True, True, False)
     sprite = make_sprite(
             agent_type = true_sprite_params[0],
             search_goal = true_sprite_params[1],

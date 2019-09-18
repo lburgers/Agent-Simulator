@@ -13,28 +13,29 @@ class CustomAStarChaser(RandomNPC):
     """ Move towards the character using A* search. """
     stype = None
 
-    speed = 1
-
+    # parameters
     tom = True
+    memory = True
+    full_field_view = False
+    lost_function = 'random'
+    see_through_walls = False
 
-    search = True
+    # default
+    speed = 1
+    orientation = LEFT
+    sight_limit = 25
     target = 'avatar'
+    search = True
     stationary = False
     random = False
     fleeing = False
-    lost_function = 'random'
 
-    see_through_walls = False
-    sight_limit = 20
-    full_field_view = False
-    orientation = LEFT
-    
-    memory = True
-    old_target = None
+    # utilities for tracking targets
+    home_cords = None
+    old_target = None # last target
     current_target = None
-
-    # save avatar goal locations
-    avatar_goals = {}
+    avatar_goals = {} # avatar goal locations
+    player_desire_cords = None
 
     def getWallDistances(self, world):
         wall_dists = [self.speed for _ in BASEDIRS]
@@ -60,7 +61,7 @@ class CustomAStarChaser(RandomNPC):
         wall_dists = self.getWallDistances(self.world)
         self.physics.active_movement(self, action, wall_dists[direction])
 
-    def searchUpdate(self, game, goal_cords):
+    def AstarPath(self, game, start_sprite, goal_cords):
         goal_sprite = None
         max_distance = float('-Inf')
 
@@ -77,12 +78,19 @@ class CustomAStarChaser(RandomNPC):
                 if goal_cords[0] == s.rect.x and goal_cords[1] == s.rect.y:
                     goal_sprite = s
 
-        path = self.world.getMoveFor(self, goal_sprite)
+        path = self.world.getMoveFor(start_sprite, goal_sprite)
+
+        next_cords = [self.world.get_sprite_tile_position(move.sprite) for move in path]
+
+        return next_cords
+
+    def searchUpdate(self, game, goal_cords):
+
+        path = self.AstarPath(game, self, goal_cords)
 
         if path and len(path)>1:
-            move = path[1]
 
-            nextX, nextY = self.world.get_sprite_tile_position(move.sprite)
+            nextX, nextY = path[1]
             nowX, nowY = self.world.get_sprite_tile_position(self)
 
             diffX = abs(nextX - nowX)
@@ -161,7 +169,9 @@ class CustomAStarChaser(RandomNPC):
         for i in range(matrix.shape[1]):
             print(matrix[:,i])
 
-    def add_avatar_goals(self, game):
+    def add_avatar_goals_and_home(self, game):
+        if self.home_cords == None:
+            self.home_cords = (self.rect.x, self.rect.y)
         if self.avatar_goals == {}:
             for goal in ['A', 'B', 'C']:
                 avatar_list = game.get_sprites(goal)
@@ -183,13 +193,13 @@ class CustomAStarChaser(RandomNPC):
         goals = [key for key in self.avatar_goals.keys()]
         for goal in goals:
             position = self.avatar_goals[goal]
-            old_dist = self.distance((self.last_player_cors[0],self.last_player_cors[1]), position)
+            old_dist = self.distance((self.last_player_cords[0],self.last_player_cords[1]), position)
             new_dist = self.distance((self.player_sprite.rect[0],self.player_sprite.rect[1]), position)
 
             goal_dists[goal] = new_dist
 
             dist_chang = new_dist - old_dist
-            # import pdb; pdb.set_trace()
+
             if dist_chang < min_change or best_goal == None:
                 best_goal = goal
                 min_change = dist_chang
@@ -197,16 +207,40 @@ class CustomAStarChaser(RandomNPC):
                 best_goal = goal
                 min_change = dist_chang
 
-
         return self.avatar_goals[best_goal]
 
+    def intercept_path(self, game, desire_cords):
+        player_path = self.AstarPath(game, self.player_sprite, desire_cords)
+        min_length = float('Inf')
+        min_path_diff = float('Inf')
+        best_path_pos = None
+
+        for i in range(1, len(player_path)):
+            path_pos = player_path[i]
+
+            sprite_to_path = self.AstarPath(game, self, path_pos)
+            sprite_path_len = len(sprite_to_path)
+
+            path_len_diff = abs((i + 1) - sprite_path_len)
+
+            if sprite_path_len <= min_length and path_len_diff == min_path_diff:
+                min_length = sprite_path_len
+                best_path_pos = path_pos
+                min_path_diff = path_len_diff
+            elif path_len_diff < min_path_diff:
+                min_length = sprite_path_len
+                best_path_pos = path_pos
+                min_path_diff = path_len_diff
+
+
+        if best_path_pos == None: return desire_cords
+        return best_path_pos
 
     def update(self, game):
-
         self.player_sprite = game.get_sprites(self.target)[0]
         player_x, player_y = self.player_sprite.rect.x, self.player_sprite.rect.y
 
-        self.add_avatar_goals(game)
+        self.add_avatar_goals_and_home(game)
 
         self.world = AStarWorld(game, self.speed)
 
@@ -227,10 +261,9 @@ class CustomAStarChaser(RandomNPC):
 
                 # infer desire if in view and has memory
                 if self.tom and self.old_target and self.memory:
-                    desire_cords = self.infer_goal(game)
-                    # self.current_target = desire_cords
-
-                    # TODO: add intercept
+                    self.player_desire_cords = self.infer_goal(game)
+                    intercept_pos = self.intercept_path(game, self.player_desire_cords)
+                    self.current_target = intercept_pos
 
                 self.old_target = self.current_target
 
@@ -239,19 +272,28 @@ class CustomAStarChaser(RandomNPC):
             
             # if not in view
             else:
-                # if can't see target and real target forget
-                # if self.current_target and perception_matrix[self.current_target[0], self.current_target[1]] == 1:
-                #     self.current_target = None
+                # if can't see real target and made it to current target => lost
+                if self.current_target == (self.rect.x, self.rect.y):
+                    self.current_target = None
 
-                # if it remembers last seen cords and has memory go there
+                # if it remembers last target and has memory go there
                 if self.current_target and self.memory:
                     self.searchUpdate(game, self.current_target)
-                
+
+                # if lost but knows which goal player was headed towards => go there
+                elif self.player_desire_cords and self.tom and self.memory:
+                    self.searchUpdate(game, self.player_desire_cords)
+
                 # else fully lost
                 else:
                     if self.lost_function == 'random':
                         self.randomUpdate(game)
+                    elif self.lost_function == 'home':
+                        self.searchUpdate(game, self.home_cords)
+                    # elif self.lost_function == 'specific':
+                    #     import pdb; pdb.set_trace()
 
-        self.last_player_cors = self.player_sprite.rect.x, self.player_sprite.rect.y
+
+        self.last_player_cords = self.player_sprite.rect.x, self.player_sprite.rect.y
 
 
