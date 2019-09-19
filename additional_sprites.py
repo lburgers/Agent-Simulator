@@ -150,7 +150,7 @@ class CustomAStarChaser(RandomNPC):
 
         if not self.full_field_view:
             if self.orientation == UP:
-                matrix[:, x+self.speed+1:] = 0
+                matrix[:, y+self.speed+1:] = 0
             elif self.orientation == DOWN:
                 matrix[:, :y-self.speed] = 0
             elif self.orientation == LEFT:
@@ -163,11 +163,16 @@ class CustomAStarChaser(RandomNPC):
         if not self.see_through_walls:
             matrix = self.addWalls(game, matrix)
 
+        if len(np.nonzero(matrix)[0]) == 0:
+            import pdb; pdb.set_trace()
         return matrix
 
     def print_matrix(self, matrix):
+        old_value = matrix[self.rect.x, self.rect.y]
+        matrix[self.rect.x, self.rect.y] = 2
         for i in range(matrix.shape[1]):
             print(matrix[:,i])
+        matrix[self.rect.x, self.rect.y] = old_value
 
     def add_avatar_goals_and_home(self, game):
         if self.home_cords == None:
@@ -211,9 +216,13 @@ class CustomAStarChaser(RandomNPC):
 
     def intercept_path(self, game, desire_cords):
         player_path = self.AstarPath(game, self.player_sprite, desire_cords)
+        player_x, player_y = self.player_sprite.rect.x, self.player_sprite.rect.y
         min_length = float('Inf')
         min_path_diff = float('Inf')
         best_path_pos = None
+
+        sprite_to_player = self.AstarPath(game, self, (player_x, player_y))
+        to_player_len = len(sprite_to_player)
 
         for i in range(1, len(player_path)):
             path_pos = player_path[i]
@@ -232,11 +241,12 @@ class CustomAStarChaser(RandomNPC):
                 best_path_pos = path_pos
                 min_path_diff = path_len_diff
 
-
+        if to_player_len-1 <= min_path_diff: return (player_x, player_y)
         if best_path_pos == None: return desire_cords
         return best_path_pos
 
     def update(self, game):
+
         self.player_sprite = game.get_sprites(self.target)[0]
         player_x, player_y = self.player_sprite.rect.x, self.player_sprite.rect.y
 
@@ -276,6 +286,8 @@ class CustomAStarChaser(RandomNPC):
                 if self.current_target == (self.rect.x, self.rect.y):
                     self.current_target = None
 
+
+
                 # if it remembers last target and has memory go there
                 if self.current_target and self.memory:
                     self.searchUpdate(game, self.current_target)
@@ -290,9 +302,12 @@ class CustomAStarChaser(RandomNPC):
                         self.randomUpdate(game)
                     elif self.lost_function == 'home':
                         self.searchUpdate(game, self.home_cords)
-                    # elif self.lost_function == 'specific':
-                    #     import pdb; pdb.set_trace()
+                    elif self.lost_function == 'specific':
+                        visible_indices = np.nonzero(perception_matrix)
+                        next_index = np.random.choice(len(visible_indices[0]))
 
+                        self.current_target = (visible_indices[0][next_index], visible_indices[1][next_index])
+                        self.searchUpdate(game, self.current_target)
 
         self.last_player_cords = self.player_sprite.rect.x, self.player_sprite.rect.y
 

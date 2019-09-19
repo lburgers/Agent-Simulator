@@ -15,6 +15,7 @@ import gym
 from gym.envs.registration import register
 import vgdl.interfaces.gym
 from vgdl.util.humanplay.controls import VGDLControls
+from vgdl.ontology.constants import *
 
 from build_level import BuildLevel
 from additional_sprites import CustomAStarChaser
@@ -89,14 +90,14 @@ def build_map(levelfile):
     builder.save()
     return builder
 
-def run_simulation(action_sequence, env, trial_count=None):
+def run_simulation(action_sequence, env, controls, trial_count=None):
     states = np.array([])
     env.reset()
     step = 0
     for step_i in itertools.count():
-        # controls.capture_key_presses()
-        # env.render()
-        obs, reward, done, info = env.step(action_sequence[step_i])
+        controls.capture_key_presses()
+        env.render()
+        obs, reward, done, info = env.step(controls.current_action)
 
         if trial_count != None:
             rgb_array = env.render('rgb_array')
@@ -104,12 +105,12 @@ def run_simulation(action_sequence, env, trial_count=None):
             png.from_array(rgb_array.reshape(-1, 3*rgb_shape[1]), 'RGB').save("./trials/%d/%d.png"% (trial_count, step))
             step += 1
 
-        if done or step_i == len(action_sequence) - 1:
+        if done :
             break
 
         states = [obs] if len(states) == 0 else np.vstack((states, obs))
 
-        # time.sleep( 1/ 15.0)
+        time.sleep( 1/ 15.0)
     return states
 
 def main():
@@ -129,7 +130,7 @@ def main():
 
     # TODO: add code for making multiple sprites and adding them to game.txt
     # TODO: add rewards (friendly/unfriendly)
-    true_sprite_params = ('search', 'avatar', 'approach', 'home', 25, True, True, False)
+    true_sprite_params = ('search', 'avatar', 'approach', 'specific', 25, True, True, False)
     sprite = make_sprite(
             agent_type = true_sprite_params[0],
             search_goal = true_sprite_params[1],
@@ -152,18 +153,19 @@ def main():
     fps = 15
     cum_reward = 0
         
-    # controls = VGDLControls(env.unwrapped.get_action_meanings())
-    # env.render('human')
+    controls = VGDLControls(env.unwrapped.get_action_meanings())
+    env.render('human')
     if SAVE_GIF:
         basedir = './trials/%d/' % trial_count
         if os.path.exists(basedir):
             shutil.rmtree(basedir) 
         os.mkdir(basedir)
 
-    action_sequence = [2] * 11
-    action_sequence += [1] * 14
+    action_sequence = [0] * 6
+    action_sequence += [2] * 11
+    action_sequence += [1] * 16
     action_sequence += [3] * 12
-    state_sequence = run_simulation(action_sequence, env, trial_count=trial_count)
+    state_sequence = run_simulation(action_sequence, env, controls, trial_count=None)
 
     if SAVE_GIF:
         images = []
