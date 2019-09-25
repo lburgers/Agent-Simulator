@@ -16,13 +16,13 @@ class CustomAStarChaser(RandomNPC):
     # parameters
     tom = True
     memory = True
-    full_field_view = False
-    lost_function = 'random'
-    see_through_walls = False
+    hearing = True
+    hearing_limit = 0
+    lost_function = None
 
     # default
     speed = 1
-    orientation = LEFT
+    orientation = RIGHT
     sight_limit = 25
     target = 'avatar'
     search = True
@@ -82,9 +82,12 @@ class CustomAStarChaser(RandomNPC):
 
         path = self.world.getMoveFor(start_sprite, goal_sprite)
 
-        next_cords = [self.world.get_sprite_tile_position(move.sprite) for move in path]
+        if path == None:
+            return []
+        else:
+            next_cords = [self.world.get_sprite_tile_position(move.sprite) for move in path]
 
-        return next_cords
+            return next_cords
 
     def searchUpdate(self, game, goal_cords):
 
@@ -150,20 +153,24 @@ class CustomAStarChaser(RandomNPC):
         belowCords = self._boundedCords(game, x-self.sight_limit, y-self.sight_limit)
         matrix[ belowCords[0] : aboveCords[0], belowCords[1] : aboveCords[1] ] = 1
 
-        if not self.full_field_view:
-            if self.orientation == UP:
-                matrix[:, y+self.speed+1:] = 0
-            elif self.orientation == DOWN:
-                matrix[:, :y-self.speed] = 0
-            elif self.orientation == LEFT:
-                matrix[x+self.speed+1:, :] = 0
-            elif self.orientation == RIGHT:
-                matrix[:x-self.speed, :] = 0
+        if self.orientation == UP:
+            matrix[:, y+self.speed+1:] = 0
+        elif self.orientation == DOWN:
+            matrix[:, :y-self.speed] = 0
+        elif self.orientation == LEFT:
+            matrix[x+self.speed+1:, :] = 0
+        elif self.orientation == RIGHT:
+            matrix[:x-self.speed, :] = 0
 
 
         # handle walls blocking vision
-        if not self.see_through_walls:
-            matrix = self.addWalls(game, matrix)
+        matrix = self.addWalls(game, matrix)
+
+        if self.hearing:
+            # add hearing limit (default)
+            aboveCords = self._boundedCords(game, x+self.hearing_limit+1, y+self.hearing_limit+1)
+            belowCords = self._boundedCords(game, x-self.hearing_limit, y-self.hearing_limit)
+            matrix[ belowCords[0] : aboveCords[0], belowCords[1] : aboveCords[1] ] = 1
 
         return matrix
 

@@ -55,27 +55,16 @@ parameters = [agent_types, search_goals, search_types, lost_types, sight_radii,
 sprite_iterator = itertools.product(*parameters)
 
 # build sprite class with custom properties
-def make_sprite(agent_type='search', search_goal='avatar', search_type='avoid',
-                lost_type='random', sight_radius=10, oriented_view=True, remembers=True, walls=True):
+def make_sprite(tom_enabled=True, lost_type='random', remembers=True, hearing_enabled=False, hearing_radius=0):
 
     class CustomNPC(CustomAStarChaser):
-        speed = 1
-
-        # base npc planner
-        search = True if agent_type == 'search' else False
-        stationary = True if agent_type == 'stationary' else False
-        random = True if agent_type == 'random' else False
-
-        # if search define target, avoid/approach, and what to do when lost
-        target = search_goal # can be [avatar, A, B, C]
-        fleeing = True if search_type == 'avoid' else False
         lost_function = lost_type # can be [random, stationary]
 
         # if search define perception params
-        see_through_walls = walls
-        sight_limit = sight_radius
-        full_field_view = not oriented_view
         memory = remembers
+        tom = tom_enabled
+        hearing = hearing_enabled
+        hearing_limit = hearing_radius
 
     return CustomNPC
 
@@ -130,16 +119,13 @@ def main():
 
     # TODO: add code for making multiple sprites and adding them to game.txt
     # TODO: add rewards (friendly/unfriendly)
-    true_sprite_params = ('search', 'avatar', 'approach', 'static', 25, True, True, False)
+    true_sprite_params = ('home', True, True, True, 5)
     sprite = make_sprite(
-            agent_type = true_sprite_params[0],
-            search_goal = true_sprite_params[1],
-            search_type = true_sprite_params[2],
-            lost_type = true_sprite_params[3],
-            sight_radius = true_sprite_params[4],
-            oriented_view = true_sprite_params[5],
-            remembers = true_sprite_params[6],
-            walls = true_sprite_params[7],
+            lost_type = true_sprite_params[0],
+            tom_enabled = true_sprite_params[1],
+            remembers = true_sprite_params[2],
+            hearing_enabled = true_sprite_params[3],
+            hearing_radius = true_sprite_params[4],
         )
 
     vgdl.registry.register(sprite.__name__, sprite)
