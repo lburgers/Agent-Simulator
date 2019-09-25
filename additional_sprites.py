@@ -36,6 +36,8 @@ class CustomAStarChaser(RandomNPC):
     current_target = None
     avatar_goals = {} # avatar goal locations
     player_desire_cords = None
+    static_route = []
+    static_route_index = 0
 
     def getWallDistances(self, world):
         wall_dists = [self.speed for _ in BASEDIRS]
@@ -163,8 +165,6 @@ class CustomAStarChaser(RandomNPC):
         if not self.see_through_walls:
             matrix = self.addWalls(game, matrix)
 
-        if len(np.nonzero(matrix)[0]) == 0:
-            import pdb; pdb.set_trace()
         return matrix
 
     def print_matrix(self, matrix):
@@ -183,6 +183,19 @@ class CustomAStarChaser(RandomNPC):
                 if len(avatar_list) == 1:
                     position = avatar_list[0].rect
                     self.avatar_goals[goal] = (position[0], position[1])
+
+        # initialize static route
+        if self.lost_function == 'static' and self.static_route == []:
+            number_of_points = np.random.randint(2, 5) # has to be 2 or greater to be a loop
+
+            for _ in range(number_of_points):
+                while True:
+                    rand_x = np.random.randint(0, game.width)
+                    rand_y = np.random.randint(0, game.height)
+                    index = self.world.get_index(rand_x, rand_y)
+                    if index not in self.world.wall_tile_indices:
+                        break
+                self.static_route.append((rand_x, rand_y))
 
     def distance(self, r1, r2):
         """ Grid physics use Hamming distances. """
@@ -203,14 +216,18 @@ class CustomAStarChaser(RandomNPC):
 
             goal_dists[goal] = new_dist
 
-            dist_chang = new_dist - old_dist
+            dist_change = new_dist - old_dist
 
-            if dist_chang < min_change or best_goal == None:
+            if dist_change < min_change or best_goal == None:
                 best_goal = goal
-                min_change = dist_chang
-            elif dist_chang == min_change and new_dist < goal_dists[best_goal]:
+                min_change = dist_change
+            elif dist_change == min_change and new_dist < goal_dists[best_goal]:
                 best_goal = goal
-                min_change = dist_chang
+                min_change = dist_change
+
+        # if not approaching goal set desire to current position
+        if (min_change >= 0):
+            return (self.player_sprite.rect[0],self.player_sprite.rect[1])
 
         return self.avatar_goals[best_goal]
 
@@ -250,9 +267,9 @@ class CustomAStarChaser(RandomNPC):
         self.player_sprite = game.get_sprites(self.target)[0]
         player_x, player_y = self.player_sprite.rect.x, self.player_sprite.rect.y
 
-        self.add_avatar_goals_and_home(game)
-
         self.world = AStarWorld(game, self.speed)
+
+        self.add_avatar_goals_and_home(game)
 
         if self.stationary:
             return
@@ -286,15 +303,14 @@ class CustomAStarChaser(RandomNPC):
                 if self.current_target == (self.rect.x, self.rect.y):
                     self.current_target = None
 
-
-
                 # if it remembers last target and has memory go there
                 if self.current_target and self.memory:
                     self.searchUpdate(game, self.current_target)
 
                 # if lost but knows which goal player was headed towards => go there
-                elif self.player_desire_cords and self.tom and self.memory:
-                    self.searchUpdate(game, self.player_desire_cords)
+                # elif self.player_desire_cords and self.tom and self.memory:
+                #     print('going to goal..')
+                #     self.searchUpdate(game, self.player_desire_cords)
 
                 # else fully lost
                 else:
@@ -308,6 +324,11 @@ class CustomAStarChaser(RandomNPC):
 
                         self.current_target = (visible_indices[0][next_index], visible_indices[1][next_index])
                         self.searchUpdate(game, self.current_target)
+                    elif self.lost_function == 'static':
+                        if (self.rect.x, self.rect.y) == self.static_route[self.static_route_index]:
+                            self.static_route_index = (self.static_route_index + 1) % len(self.static_route)
+
+                        self.searchUpdate(game, self.static_route[self.static_route_index])
 
         self.last_player_cords = self.player_sprite.rect.x, self.player_sprite.rect.y
 

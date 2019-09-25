@@ -130,7 +130,7 @@ def main():
 
     # TODO: add code for making multiple sprites and adding them to game.txt
     # TODO: add rewards (friendly/unfriendly)
-    true_sprite_params = ('search', 'avatar', 'approach', 'specific', 25, True, True, False)
+    true_sprite_params = ('search', 'avatar', 'approach', 'static', 25, True, True, False)
     sprite = make_sprite(
             agent_type = true_sprite_params[0],
             search_goal = true_sprite_params[1],
