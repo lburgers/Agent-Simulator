@@ -17,6 +17,8 @@ BasicGame
         scared avatar  > killSprite scoreChange=1
         avatar angry  > killSprite scoreChange=-1
 
+        avatar A > killSprite scoreChange=-1
+
     LevelMapping
         0 > floor scared
         1 > floor angry
@@ -30,3 +32,4 @@ BasicGame
     TerminationSet
         SpriteCounter stype=goat win=True
         SpriteCounter stype=avatar win=False
+        SpriteCounter stype=A win=True

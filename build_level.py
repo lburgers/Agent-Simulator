@@ -13,6 +13,14 @@ class BuildLevel:
 	def add(self, x, y, char):
 		self.grid[y][x] = char
 
+	def grid_string(self):
+		grid_string = ''
+		for row in self.grid:
+			for c in row:
+				grid_string += c
+			grid_string += '\n'
+		return grid_string
+
 	def save(self):
 		new_content = '\n'.join([''.join(row) for row in self.grid])
 		tmp_file = open(self.level_name, "w")

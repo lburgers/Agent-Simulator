@@ -1,164 +1,37 @@
 #!/usr/bin/env python
 
-import os
-import shutil
-import logging
-import time
 import itertools
 from collections import defaultdict
-import numpy as np
 
-import imageio
-import png
-
-import gym
-from gym.envs.registration import register
-import vgdl.interfaces.gym
-from vgdl.util.humanplay.controls import VGDLControls
-from vgdl.ontology.constants import *
-
-from build_level import BuildLevel
-from additional_sprites import CustomAStarChaser
+from controller import Controller
 
 SAVE_GIF = True
 
-
-def register_vgdl_env(domain_file, level_file, observer=None, blocksize=None, counter=0):
-    level_name = '.'.join(os.path.basename(level_file).split('.')[:-1])
-    env_name = 'vgdl_{}-v0'.format(counter)
-
-    register(
-        id=env_name,
-        entry_point='vgdl.interfaces.gym:VGDLEnv',
-        kwargs={
-            'game_file': domain_file,
-            'level_file': level_file,
-            'block_size': blocksize,
-            'obs_type': observer,
-        },
-    )
-
-    return env_name
-
 # these define which parameters are tested (can be changed)
-agent_types = ['search', 'random', 'stationary']
-search_goals = ['avatar']
-search_types = ['approach', 'avoid']
-lost_types = ['random', 'stationary']
-sight_radii = [5, 10, 25]
-oriented_views = [True, False]
+lost_types = ['random', 'stationary', 'home', 'static']
+tom_types = [True, False]
 remembers_types = [True, False]
-walls_types = [True, False]
+hearing_types = [True, False]
+hearing_radii = [5, 10, 25]
 
-parameters = [agent_types, search_goals, search_types, lost_types, sight_radii,
-                oriented_views, remembers_types, walls_types]
+parameters = [lost_types, tom_types, remembers_types, hearing_types, hearing_radii]
 sprite_iterator = itertools.product(*parameters)
 
-# build sprite class with custom properties
-def make_sprite(tom_enabled=True, lost_type='random', remembers=True, hearing_enabled=False, hearing_radius=0):
-
-    class CustomNPC(CustomAStarChaser):
-        lost_function = lost_type # can be [random, stationary]
-
-        # if search define perception params
-        memory = remembers
-        tom = tom_enabled
-        hearing = hearing_enabled
-        hearing_limit = hearing_radius
-
-    return CustomNPC
-
-def build_map(levelfile):
-    builder = BuildLevel(levelfile)
-    builder.add(20,5, 'A') # Add an avatar to the map at (x, y)
-    builder.add(20,13, '0') # Add a friendly (reward +1) NPC to the map
-    # builder.add(11,9, '1') # Add a dangerous (reward -1) NPC to the map
-    builder.add(20,21, 'Z') # Add a GOAL to the map
-    # builder.add(1,9, 'Y') # Add a GOAL to the map
-    builder.add(1,21, 'X') # Add a GOAL to the map
-    builder.save()
-    return builder
-
-def run_simulation(action_sequence, env, controls, trial_count=None):
-    states = np.array([])
-    env.reset()
-    step = 0
-    for step_i in itertools.count():
-        controls.capture_key_presses()
-        env.render()
-        obs, reward, done, info = env.step(controls.current_action)
-
-        if trial_count != None:
-            rgb_array = env.render('rgb_array')
-            rgb_shape = rgb_array.shape
-            png.from_array(rgb_array.reshape(-1, 3*rgb_shape[1]), 'RGB').save("./trials/%d/%d.png"% (trial_count, step))
-            step += 1
-
-        if done :
-            break
-
-        states = [obs] if len(states) == 0 else np.vstack((states, obs))
-
-        time.sleep( 1/ 15.0)
-    return states
 
 def main():
 
-    levelfile = './level.txt'
-    domainfile = './game.txt'
-    observer_cls = 'objects'
-    blocksize = 24
-    reps = 1
-    pause_on_finish = False
-    tracedir = None
-    env_counter = 0
+    # positions = {'A': (20,3), '0': (20,13), 'Z': (20,21), 'X': (1,21)}
+    positions = {}
+    true_sprite_params = ('home', True, True, True, 5)   
 
-    trial_count = 10
-
-    builder = build_map(levelfile)
-
-    # TODO: add code for making multiple sprites and adding them to game.txt
-    # TODO: add rewards (friendly/unfriendly)
-    true_sprite_params = ('home', True, True, True, 5)
-    sprite = make_sprite(
-            lost_type = true_sprite_params[0],
-            tom_enabled = true_sprite_params[1],
-            remembers = true_sprite_params[2],
-            hearing_enabled = true_sprite_params[3],
-            hearing_radius = true_sprite_params[4],
-        )
-
-    vgdl.registry.register(sprite.__name__, sprite)
-    env_name = register_vgdl_env(domainfile, builder.level_name, observer_cls, blocksize, env_counter)
-    env_counter += 1
-    # logging.basicConfig(format='%(levelname)s:%(name)s %(message)s',
-    #         level=logging.DEBUG)
-    # logger = logging.getLogger(__name__)
-
-    env = gym.make(env_name)
-    fps = 15
-    cum_reward = 0
-        
-    controls = VGDLControls(env.unwrapped.get_action_meanings())
-    env.render('human')
-    if SAVE_GIF:
-        basedir = './trials/%d/' % trial_count
-        if os.path.exists(basedir):
-            shutil.rmtree(basedir) 
-        os.mkdir(basedir)
+    controller = Controller(positions, true_sprite_params)
+    env = controller.make_env(true_sprite_params)
 
     action_sequence = [0] * 6
     action_sequence += [2] * 11
     action_sequence += [1] * 16
     action_sequence += [3] * 12
-    state_sequence = run_simulation(action_sequence, env, controls, trial_count=None)
-
-    if SAVE_GIF:
-        images = []
-        for i in range(len(os.listdir(basedir))-1):
-            images.append(imageio.imread(basedir + '%d.png' % (i)))
-        imageio.mimsave('./trials/%d.gif' % trial_count, images)
-        shutil.rmtree(basedir)
+    state_sequence = controller.run_simulation(action_sequence, human=True, save=True)
 
     param_counter = [defaultdict(lambda: 0) for _ in parameters]
     sprite_counter = defaultdict(lambda: 0)
@@ -167,22 +40,9 @@ def main():
     import pdb; pdb.set_trace()
     for sprite_params in sprite_iterator:
 
-        sprite = make_sprite(
-                agent_type = sprite_params[0],
-                search_goal = sprite_params[1],
-                search_type = sprite_params[2],
-                lost_type = sprite_params[3],
-                sight_radius = sprite_params[4],
-                oriented_view = sprite_params[5],
-                remembers = sprite_params[6],
-                walls = sprite_params[7],
-            )
-        vgdl.registry.register(sprite.__name__, sprite)
-        env_name = register_vgdl_env(domainfile, builder.level_name, observer_cls, blocksize, env_counter)
-        env_counter += 1
-        env = gym.make(env_name)
+        env = controller.make_env(sprite_params)
 
-        test_state_sequence = run_simulation(action_sequence, env)
+        test_state_sequence = controller.run_simulation(action_sequence)
 
         if state_sequence.shape == test_state_sequence.shape and (state_sequence == test_state_sequence).all():
             for i, key in enumerate(sprite_params):
@@ -201,9 +61,7 @@ def main():
             print(key, ' ', marginal_prob),
         print()
 
-    env.close()
-    builder.close()
-
+    controller.close()
 
 if __name__ == '__main__':
     main()

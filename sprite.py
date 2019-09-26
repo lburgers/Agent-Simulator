@@ -296,6 +296,7 @@ class CustomAStarChaser(RandomNPC):
                 # infer desire if in view and has memory
                 if self.tom and self.old_target and self.memory:
                     self.player_desire_cords = self.infer_goal(game)
+                    print(self.player_desire_cords)
                     intercept_pos = self.intercept_path(game, self.player_desire_cords)
                     self.current_target = intercept_pos
 
@@ -321,6 +322,7 @@ class CustomAStarChaser(RandomNPC):
 
                 # else fully lost
                 else:
+                    print('lost')
                     if self.lost_function == 'random':
                         self.randomUpdate(game)
                     elif self.lost_function == 'home':
