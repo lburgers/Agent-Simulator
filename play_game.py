@@ -8,13 +8,12 @@ from controller import Controller
 SAVE_GIF = True
 
 # these define which parameters are tested (can be changed)
-lost_types = ['random', 'stationary', 'home', 'static']
+lost_types = ['stationary', 'home', 'static_route', 'search']
 tom_types = [True, False]
 remembers_types = [True, False]
 hearing_types = [True, False]
-hearing_radii = [5, 10, 25]
 
-parameters = [lost_types, tom_types, remembers_types, hearing_types, hearing_radii]
+parameters = [lost_types, tom_types, remembers_types, hearing_types]
 sprite_iterator = itertools.product(*parameters)
 
 
@@ -22,7 +21,7 @@ def main():
 
     # positions = {'A': (20,3), '0': (20,13), 'Z': (20,21), 'X': (1,21)}
     positions = {}
-    true_sprite_params = ('home', True, True, True, 5)   
+    true_sprite_params = ('static', False, True, False)    
 
     controller = Controller(positions, true_sprite_params)
     env = controller.make_env(true_sprite_params)
@@ -31,13 +30,14 @@ def main():
     action_sequence += [2] * 11
     action_sequence += [1] * 16
     action_sequence += [3] * 12
-    state_sequence = controller.run_simulation(action_sequence, human=True, save=True)
+    state_sequence = controller.run_simulation(action_sequence, human=True, save=False)
+
+    import pdb; pdb.set_trace()
 
     param_counter = [defaultdict(lambda: 0) for _ in parameters]
     sprite_counter = defaultdict(lambda: 0)
 
     print('TESTING...')
-    import pdb; pdb.set_trace()
     for sprite_params in sprite_iterator:
 
         env = controller.make_env(sprite_params)

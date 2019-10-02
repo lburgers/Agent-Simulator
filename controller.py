@@ -2,6 +2,7 @@ import gym
 from gym.envs.registration import register
 import vgdl.interfaces.gym
 from vgdl.util.humanplay.controls import VGDLControls
+from vgdl.ontology.constants import *
 
 import numpy as np
 import itertools
@@ -121,7 +122,7 @@ class Controller():
 			tom = sprite_params[1]
 			memory = sprite_params[2]
 			hearing = sprite_params[3]
-			hearing_limit = sprite_params[4]
+			orientation = LEFT
 
 		return CustomNPC
 

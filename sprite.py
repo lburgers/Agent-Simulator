@@ -17,12 +17,12 @@ class CustomAStarChaser(RandomNPC):
     tom = True
     memory = True
     hearing = True
-    hearing_limit = 0
+    hearing_limit = 10
     lost_function = None
+    orientation = None
 
     # default
     speed = 1
-    orientation = RIGHT
     sight_limit = 25
     target = 'avatar'
     search = True
@@ -31,6 +31,7 @@ class CustomAStarChaser(RandomNPC):
     fleeing = False
 
     # utilities for tracking targets
+    initial_orientation = None
     home_cords = None
     old_target = None # last target
     current_target = None
@@ -182,6 +183,8 @@ class CustomAStarChaser(RandomNPC):
         matrix[self.rect.x, self.rect.y] = old_value
 
     def add_avatar_goals_and_home(self, game):
+        if self.initial_orientation == None:
+            self.initial_orientation = self.orientation
         if self.home_cords == None:
             self.home_cords = (self.rect.x, self.rect.y)
         if self.avatar_goals == {}:
@@ -193,8 +196,11 @@ class CustomAStarChaser(RandomNPC):
 
         # initialize static route
         if self.lost_function == 'static' and self.static_route == []:
-            number_of_points = np.random.randint(2, 5) # has to be 2 or greater to be a loop
+            # number_of_points = np.random.randint(2, 5) # has to be 2 or greater to be a loop
+            
+            number_of_points = 1 # TODO: add way to control this
 
+            self.static_route.append(self.home_cords)
             for _ in range(number_of_points):
                 while True:
                     rand_x = np.random.randint(0, game.width)
@@ -296,7 +302,6 @@ class CustomAStarChaser(RandomNPC):
                 # infer desire if in view and has memory
                 if self.tom and self.old_target and self.memory:
                     self.player_desire_cords = self.infer_goal(game)
-                    print(self.player_desire_cords)
                     intercept_pos = self.intercept_path(game, self.player_desire_cords)
                     self.current_target = intercept_pos
 
@@ -307,6 +312,7 @@ class CustomAStarChaser(RandomNPC):
             
             # if not in view
             else:
+
                 # if can't see real target and made it to current target => lost
                 if self.current_target == (self.rect.x, self.rect.y):
                     self.current_target = None
@@ -316,18 +322,20 @@ class CustomAStarChaser(RandomNPC):
                     self.searchUpdate(game, self.current_target)
 
                 # if lost but knows which goal player was headed towards => go there
-                # elif self.player_desire_cords and self.tom and self.memory:
-                #     print('going to goal..')
-                #     self.searchUpdate(game, self.player_desire_cords)
+                elif self.player_desire_cords and self.tom and self.memory:
+                    self.searchUpdate(game, self.player_desire_cords)
 
                 # else fully lost
                 else:
-                    print('lost')
                     if self.lost_function == 'random':
                         self.randomUpdate(game)
                     elif self.lost_function == 'home':
+                        # if home go to initial orientation
+                        if self.home_cords == (self.rect.x, self.rect.y):
+                            self.orientation = self.initial_orientation
+
                         self.searchUpdate(game, self.home_cords)
-                    elif self.lost_function == 'specific':
+                    elif self.lost_function == 'search':
                         visible_indices = np.nonzero(perception_matrix)
                         next_index = np.random.choice(len(visible_indices[0]))
 
