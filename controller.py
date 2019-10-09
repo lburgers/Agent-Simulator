@@ -20,7 +20,9 @@ from build_level import BuildLevel
 
 class Controller():
 
-	def __init__(self, position_object, sprite_params):
+	def __init__(self, position_object, sprite_params,  pref=None):
+
+		self.positions = position_object
 
 		self.true_sprite_params = sprite_params
 		self.level_file = './level.txt'
@@ -28,6 +30,7 @@ class Controller():
 		self.observer_cls = 'objects'
 		self.blocksize = 24
 		self.env_counter = 0
+		self.prefix = pref
 
 		self.trial_count = 10
 
@@ -100,36 +103,51 @@ class Controller():
 			else:
 				self.save_log_file(unique_filename, action_sequence)
 
-		return states
+		if human:
+			return states, human_actions
+		else:
+			return states, action_sequence
 
 	def save_log_file(self, unique_filename, action_sequence):
 		grid_string = self.builder.grid_string()
 		action_string = str(action_sequence)
 		true_sprite_string = str(self.true_sprite_params)
 
-		full_file = '%s \n\n %s \n\n %s \n' % (grid_string, true_sprite_string, action_string)
+		full_file = '%s \n\n %s \n\n %s \n\n %s \n' % (grid_string, self.positions, true_sprite_string, action_string)
 
 		with open('./trials/%s.txt' % unique_filename, 'w') as f:
 			f.write(full_file)
 
 
-	def make_sprite(self, sprite_params):
+	def make_sprite(self, sprite_params, route, direction, home):
 
 		class CustomNPC(CustomAStarChaser):
-			lost_function = sprite_params[0] # can be [random, stationary]
 
-			# if search define perception params
+			lost_function = sprite_params[0]
 			tom = sprite_params[1]
 			memory = sprite_params[2]
-			hearing = sprite_params[3]
-			orientation = LEFT
+			forgets = sprite_params[3]
+			hearing = sprite_params[4]
+			orientation = direction
+
+			# reset
+			mode = 'DEFENSIVE'
+			searching = False
+			alert_step = 0
+			initial_orientation = None
+			last_player_cords = None # last target
+			current_target = None
+			player_desire_cords = None
+			home_cords = home
+			static_route = route
+			static_route_index = 0
 
 		return CustomNPC
 
 
-	def make_env(self, sprite_params):
-		sprite = self.make_sprite(sprite_params)
-		vgdl.registry.register(sprite.__name__, sprite)
+	def make_env(self, sprite_params, route=[], dir=LEFT, home=None):
+		self.sprite = self.make_sprite(sprite_params, route, dir, home)
+		vgdl.registry.register(self.sprite.__name__, self.sprite)
 		env_name = self.register_vgdl_env()
 		
 		self.env = gym.make(env_name)
@@ -137,6 +155,8 @@ class Controller():
 
 	def register_vgdl_env(self):
 		env_name = 'vgdl_{}-v0'.format(self.env_counter)
+		if self.prefix:
+			env_name = '{}-vgdl_{}-v0'.format(self.prefix, self.env_counter)
 
 		register(
 			id=env_name,
@@ -154,5 +174,5 @@ class Controller():
 		return env_name
 
 	def close(self):
-		self.env.close()
+		# self.env.close()
 		self.builder.close()

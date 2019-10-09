@@ -1,5 +1,6 @@
 
 import numpy as np
+import random
 import pygame
 from pygame.math import Vector2
 
@@ -8,35 +9,40 @@ from vgdl.ai import AStarWorld
 from vgdl.ontology.sprites import RandomNPC
 from vgdl.ontology.constants import *
 
+DEFENSIVE = "DEFENSIVE"
+ALERT = "ALERT"
 
 class CustomAStarChaser(RandomNPC):
     """ Move towards the character using A* search. """
     stype = None
 
     # parameters
+    lost_function = None
     tom = True
     memory = True
+    forgets = True
     hearing = True
-    hearing_limit = 10
-    lost_function = None
     orientation = None
 
     # default
     speed = 1
     sight_limit = 25
+    memory_limit = 40
+    hearing_limit = 10
     target = 'avatar'
-    search = True
-    stationary = False
-    random = False
     fleeing = False
 
     # utilities for tracking targets
+    mode = DEFENSIVE
+    searching = False
+    alert_step = 0
     initial_orientation = None
     home_cords = None
-    old_target = None # last target
+    last_player_cords = None # last target
     current_target = None
     avatar_goals = {} # avatar goal locations
     player_desire_cords = None
+    corners = []
     static_route = []
     static_route_index = 0
 
@@ -57,12 +63,6 @@ class CustomAStarChaser(RandomNPC):
                     wall_dists[i] = diff - 1
                     break
         return wall_dists
-
-    def randomUpdate(self, game):
-        action = game.random_generator.choice(BASEDIRS)
-        direction = BASEDIRS.index(action)
-        wall_dists = self.getWallDistances(self.world)
-        self.physics.active_movement(self, action, wall_dists[direction])
 
     def AstarPath(self, game, start_sprite, goal_cords):
         goal_sprite = None
@@ -125,6 +125,31 @@ class CustomAStarChaser(RandomNPC):
         if y >= 0 and y < game.height:
             bounded_y = y
         return bounded_x, bounded_y
+
+    def findCorners(self, game):
+        def checkCorner(corner):
+            if corner[0] >= 0 and corner[0] < game.width \
+                and corner[1] >= 0 and corner[1] < game.height \
+                and corner not in self.corners:
+                return True
+            return False
+
+        for index in self.world.wall_tile_indices:
+            x = index % game.width
+            y = (index - x) / game.width
+            above_index = self.world.get_index(x, y-1)
+            below_index = self.world.get_index(x, y+1)
+            left_index = self.world.get_index(x-1, y)
+            right_index = self.world.get_index(x+1, y)
+
+            if below_index in self.world.wall_tile_indices and right_index in self.world.wall_tile_indices:
+                if checkCorner((x + 1, y + 1 )): self.corners.append( (x + 1, y + 1 ) )
+            if above_index in self.world.wall_tile_indices and right_index in self.world.wall_tile_indices:
+                if checkCorner((x + 1, y - 1 )): self.corners.append( (x + 1, y - 1 ) )
+            if below_index in self.world.wall_tile_indices and left_index in self.world.wall_tile_indices:
+                if checkCorner((x - 1, y + 1 )): self.corners.append( (x - 1, y + 1 ) )
+            if above_index in self.world.wall_tile_indices and left_index in self.world.wall_tile_indices:
+                if checkCorner((x - 1, y - 1 )): self.corners.append( (x - 1, y - 1 ) )
 
     def addWalls(self, game, matrix):
         new_matrix = matrix
@@ -195,20 +220,21 @@ class CustomAStarChaser(RandomNPC):
                     self.avatar_goals[goal] = (position[0], position[1])
 
         # initialize static route
-        if self.lost_function == 'static' and self.static_route == []:
+        if self.lost_function == 'route' and self.static_route == []:
             # number_of_points = np.random.randint(2, 5) # has to be 2 or greater to be a loop
-            
+            self.static_route_index = 0
             number_of_points = 1 # TODO: add way to control this
-
+            self.findCorners(game)
             self.static_route.append(self.home_cords)
             for _ in range(number_of_points):
-                while True:
-                    rand_x = np.random.randint(0, game.width)
-                    rand_y = np.random.randint(0, game.height)
-                    index = self.world.get_index(rand_x, rand_y)
-                    if index not in self.world.wall_tile_indices:
-                        break
-                self.static_route.append((rand_x, rand_y))
+                # while True:
+                #     rand_x = np.random.randint(0, game.width)
+                #     rand_y = np.random.randint(0, game.height)
+                #     index = self.world.get_index(rand_x, rand_y)
+                #     if index not in self.world.wall_tile_indices:
+                #         break
+
+                self.static_route.append(random.choice(self.corners))
 
     def distance(self, r1, r2):
         """ Grid physics use Hamming distances. """
@@ -281,72 +307,85 @@ class CustomAStarChaser(RandomNPC):
         player_x, player_y = self.player_sprite.rect.x, self.player_sprite.rect.y
 
         self.world = AStarWorld(game, self.speed)
-
+        self.findCorners(game)
         self.add_avatar_goals_and_home(game)
 
-        if self.stationary:
-            return
-        elif self.random:
-            self.randomUpdate(game)
+        perception_matrix = self.buildPerceptionMatrix(game)
 
-        elif self.search:
+        in_view = False
 
-            perception_matrix = self.buildPerceptionMatrix(game)
-            # self.print_matrix(perception_matrix)
+        # if the target is in view
+        if perception_matrix[player_x, player_y] == 1:
 
-            # if the target is in view
-            if perception_matrix[player_x, player_y] == 1:
+            self.current_target = (player_x, player_y)
 
-                self.current_target = (player_x, player_y)
+            # infer desire if in view and has memory
+            if self.tom and self.last_player_cords and self.memory:
+                self.player_desire_cords = self.infer_goal(game)
+                intercept_pos = self.intercept_path(game, self.player_desire_cords)
+                self.current_target = intercept_pos
 
-                # infer desire if in view and has memory
-                if self.tom and self.old_target and self.memory:
-                    self.player_desire_cords = self.infer_goal(game)
-                    intercept_pos = self.intercept_path(game, self.player_desire_cords)
-                    self.current_target = intercept_pos
+            self.last_player_cords = (player_x, player_y)
+            self.mode = ALERT
+            self.alert_step = 0
+            in_view = True
+            self.searching = False
 
-                self.old_target = self.current_target
 
+        if self.mode == ALERT:
+
+            if in_view:
                 self.searchUpdate(game, self.current_target)
-
-            
-            # if not in view
             else:
+
+                self.alert_step += 1
+                if not self.memory or (self.forgets and self.alert_step > self.memory_limit):
+                    self.mode = DEFENSIVE
 
                 # if can't see real target and made it to current target => lost
                 if self.current_target == (self.rect.x, self.rect.y):
                     self.current_target = None
+                if self.player_desire_cords == (self.rect.x, self.rect.y):
+                    self.player_desire_cords = None
 
-                # if it remembers last target and has memory go there
+                # if has current target and mem go to last location
                 if self.current_target and self.memory:
                     self.searchUpdate(game, self.current_target)
 
-                # if lost but knows which goal player was headed towards => go there
+                # if lost but knows which goal player was headed towards => go to their goal
                 elif self.player_desire_cords and self.tom and self.memory:
                     self.searchUpdate(game, self.player_desire_cords)
 
-                # else fully lost
-                else:
-                    if self.lost_function == 'random':
-                        self.randomUpdate(game)
-                    elif self.lost_function == 'home':
-                        # if home go to initial orientation
-                        if self.home_cords == (self.rect.x, self.rect.y):
-                            self.orientation = self.initial_orientation
+                # if lost target, has mem, but no tom => start searching
+                elif not self.current_target and self.memory:
+                    self.searching = True
+                    visible_indices = np.nonzero(perception_matrix)
+                    next_index = np.random.choice(len(visible_indices[0]))
 
-                        self.searchUpdate(game, self.home_cords)
-                    elif self.lost_function == 'search':
-                        visible_indices = np.nonzero(perception_matrix)
-                        next_index = np.random.choice(len(visible_indices[0]))
+                    self.current_target = (visible_indices[0][next_index], visible_indices[1][next_index])
+                    self.searchUpdate(game, self.current_target)
 
-                        self.current_target = (visible_indices[0][next_index], visible_indices[1][next_index])
-                        self.searchUpdate(game, self.current_target)
-                    elif self.lost_function == 'static':
-                        if (self.rect.x, self.rect.y) == self.static_route[self.static_route_index]:
-                            self.static_route_index = (self.static_route_index + 1) % len(self.static_route)
 
-                        self.searchUpdate(game, self.static_route[self.static_route_index])
+        elif self.mode == DEFENSIVE:
 
-        self.last_player_cords = self.player_sprite.rect.x, self.player_sprite.rect.y
+            self.searching = False
+
+            if self.lost_function == 'home':
+                # if home go to initial orientation
+                if self.home_cords == (self.rect.x, self.rect.y):
+                    self.orientation = self.initial_orientation
+
+                self.searchUpdate(game, self.home_cords)
+            
+            elif self.lost_function == 'route':
+                if (self.rect.x, self.rect.y) == self.static_route[self.static_route_index]:
+                    self.static_route_index = (self.static_route_index + 1) % len(self.static_route)
+
+                self.searchUpdate(game, self.static_route[self.static_route_index])
+           
+            elif self.lost_function == 'stationary':
+                return
+        
+        
 
 

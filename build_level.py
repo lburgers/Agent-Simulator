@@ -1,10 +1,10 @@
-import tempfile
+import uuid
 import os
 
 class BuildLevel:
 
 	def __init__(self, level_file):
-		self.level_name = 'tmp.txt'
+		self.level_name = str(uuid.uuid4())
 		with open(level_file, 'r') as file:
 		    content = file.read()
 		    lines = content.split('\n')
