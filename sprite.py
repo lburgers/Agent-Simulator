@@ -28,7 +28,7 @@ class CustomAStarChaser(RandomNPC):
     speed = 1
     sight_limit = 25
     memory_limit = 40
-    hearing_limit = 10
+    hearing_limit = 5
     target = 'avatar'
     fleeing = False
 

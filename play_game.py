@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import itertools
+import numpy as np
 from collections import defaultdict
 
 from controller import Controller
@@ -21,12 +22,12 @@ sprite_iterator = itertools.product(*parameters)
 param_counter = [defaultdict(lambda: 0) for _ in parameters]
 sprite_counter = defaultdict(lambda: 0) 
 
-positions = {'A': (3, 3), '0': (22, 13) }
-true_sprite_params = ('home', False, True, False, False)    
+positions = {'A': (3, 3), '0': (22, 13)}
+true_sprite_params = ('home', False, True, False, False)
+
 
 controller = Controller(positions, true_sprite_params)
 search_controller = Controller(positions, true_sprite_params, pref="search")
-
 
 def count_match(sprite_params):
     for i, key in enumerate(sprite_params):
@@ -51,6 +52,7 @@ def check_match_with_search(test_controller, actions, true_sequence, sprite_para
     jdiff = 0
     search_index = 2
     searching_counter = 0
+    max_search_len = 0
 
     sprite = test_controller.sprite
 
@@ -58,26 +60,26 @@ def check_match_with_search(test_controller, actions, true_sequence, sprite_para
     # test if searching
     for j in range(len(true_sequence)):
 
-        if j - jdiff >= len(test_sequence):
+        # get correct states TODO: check that this works for forgetting
+        if not searching and j - jdiff >= len(test_sequence):
             match = False
             break
+        elif searching and j - jdiff >= len(test_sequence):
+            true_state, test_state = true_sequence[j], np.zeros(len(true_sequence[j]))
+        else:
+            true_state, test_state = true_sequence[j], test_sequence[j - jdiff]
 
-        true_state, test_state = true_sequence[j], test_sequence[j - jdiff]
-
+        # run tests
         if (true_state == test_state).all():
             continue
 
         elif (searching or true_state[search_index] == test_state[search_index]) and true_state[search_index] == 1:
             searching = True
             searching_counter += 1
-            # TODO: fix forgetting inference (doesn't work for true and false)
-            # if sprite.forgets and searching_counter >= sprite.memory_limit:
-            #     match = False
-            #     break
-
             continue
 
         elif searching and true_state[search_index] == 0:
+            max_search_len = max(max_search_len, searching_counter)
             searching_counter = 0
             searching = False
             search_controller.build_map({
@@ -97,18 +99,17 @@ def check_match_with_search(test_controller, actions, true_sequence, sprite_para
             match = False
             break
 
+    if sprite.forgets and max_search_len >= sprite.memory_limit:
+        match = False
+
     return match
 
 
 def main():
 
-    env = controller.make_env(true_sprite_params)
+    env = controller.make_env(true_sprite_params, [positions['0'], (1, 23)]) #TODO: route assumption here
 
-    # action_sequence = [0] * 6
-    # action_sequence += [2] * 11
-    # action_sequence += [1] * 16
-    # action_sequence += [3] * 
-    # action_sequence = [4, 4, 4, 4, 1, 1, 1, 1, 1, 1, 1, 1, 4, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 4, 2, 4, 0, 0, 0, 0, 4, 2, 2, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 0, 0, 4, 4, 3, 3, 3, 3, 3, 3, 0, 3, 3, 3, 3, 3, 3, 3, 4, 4]
+    action_sequence = [4, 4, 4, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 4, 4, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 2, 4, 0, 0, 0, 0, 0, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 0, 0, 0, 0, 0]
     state_sequence, action_sequence = controller.run_simulation([], human=True, save=True)
 
     print('TESTING...')
@@ -130,10 +131,9 @@ def main():
                     count_match(sprite_params)
                     break
 
-        if check_match_with_search(controller, action_sequence, state_sequence, sprite_params):
+        elif check_match_with_search(controller, action_sequence, state_sequence, sprite_params):
             print('match', sprite_params)
             count_match(sprite_params)            
-
 
     print('True sprite params: ', true_sprite_params)
     print('\nPredicted sprite params:')
