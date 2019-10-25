@@ -2,7 +2,7 @@ BasicGame
     SpriteSet
         floor > Immovable hidden=True img=white
         wall > Immovable img=black
-        avatar > MovingAvatar img=blue_circle
+        avatar > OrientedAvatar img=blue_circle
         goat > CustomNPC
             angry  > img=red_triangle
             scared > img=newset/piranha2

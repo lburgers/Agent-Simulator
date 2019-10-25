@@ -9,6 +9,7 @@ import itertools
 import time
 import uuid
 import os
+import copy
 import shutil
 
 import imageio
@@ -17,6 +18,13 @@ import png
 from sprite import CustomAStarChaser
 from build_level import BuildLevel
 
+reverse_action = {
+	0: 1,
+	1: 0,
+	2: 3,
+	3: 2,
+	4: 4,
+}
 
 class Controller():
 
@@ -49,6 +57,76 @@ class Controller():
 
 		self.builder.save()
 
+
+	def test_sequence(self, action_sequence, true_sequence, debug=False):
+
+		prob = 0.0
+		sprite = None
+		old_pos = None
+		old_diff = None
+
+		self.env.reset()
+
+		# TODO: add direction change probabilities
+
+		for step_i in itertools.count():
+
+			prob_multiplier = 0.0
+
+
+			if sprite and sprite.searching:
+
+				next_cords = (true_sequence[step_i][0], true_sequence[step_i][1])
+				old_dict = copy.deepcopy(sprite.__dict__)
+				obs, reward, done, sprite = self.env.step(action_sequence[step_i], next_cords)
+				current_pos = (sprite.rect[0], sprite.rect[1])
+
+				if not sprite.searching:
+					# backtrack avatar and sprite one step (kinda hacky)
+					self.env.step(reverse_action[action_sequence[step_i]])
+					sprite.positionUpdate((true_sequence[step_i-1][0], true_sequence[step_i-1][1]))
+					sprite.set_dict(old_dict) # bring sprite back one time step
+
+					obs, reward, done, sprite = self.env.step(action_sequence[step_i]) # redo step
+
+				elif current_pos == old_pos:
+					return 0.0
+				else:
+					diff = (current_pos[0] - old_pos[0], current_pos[1] - old_pos[1])
+					if old_diff and diff != old_diff:
+						prob_multiplier = np.log(1/3.0)
+						if debug: print('.')
+
+					old_diff = diff
+
+
+			else:
+
+				obs, reward, done, sprite = self.env.step(action_sequence[step_i])
+				if sprite.searching and not done:
+					sprite.positionUpdate((true_sequence[step_i][0], true_sequence[step_i][1]))
+					prob += np.log(1/3.0)
+					old_pos = (obs[0], obs[1])
+					if debug: print('.')
+					continue
+			
+			old_pos = (obs[0], obs[1])
+
+			if done:
+				break
+
+			if (true_sequence[step_i] == obs).all():
+				prob += prob_multiplier
+			else:
+				return 0.0
+
+			if step_i == len(action_sequence) - 1:
+				break
+
+
+		return np.exp(prob)
+
+
 		
 	def run_simulation(self, action_sequence, human=False, save=False):
 		if save:
@@ -64,17 +142,20 @@ class Controller():
 
 		states = np.array([])
 		self.env.reset()
-		human_actions = []
+		actions_used = []
 		for step_i in itertools.count():
 
 			if human:
 				controls.capture_key_presses()
 				action = controls.current_action
-				human_actions.append(action)
+				actions_used.append(action)
 				obs, reward, done, info = self.env.step(action)
 				self.env.render()
 			else:
 				obs, reward, done, info = self.env.step(action_sequence[step_i])
+				actions_used.append(action_sequence[step_i])
+
+			states = [obs] if len(states) == 0 else np.vstack((states, obs))
 
 			if save:
 				rgb_array = self.env.render('rgb_array')
@@ -86,8 +167,6 @@ class Controller():
 			if not human and step_i == len(action_sequence) - 1:
 				break
 
-			states = [obs] if len(states) == 0 else np.vstack((states, obs))
-
 			if human:
 				time.sleep( 1/ 15.0)
 
@@ -98,15 +177,9 @@ class Controller():
 			imageio.mimsave('./trials/%s.gif' % unique_filename, images)
 			shutil.rmtree(basedir)
 
-			if human:
-				self.save_log_file(unique_filename, human_actions)
-			else:
-				self.save_log_file(unique_filename, action_sequence)
+			self.save_log_file(unique_filename, actions_used)
 
-		if human:
-			return states, human_actions
-		else:
-			return states, action_sequence
+		return states, actions_used
 
 	def save_log_file(self, unique_filename, action_sequence):
 		grid_string = self.builder.grid_string()

@@ -46,6 +46,10 @@ class CustomAStarChaser(RandomNPC):
     static_route = []
     static_route_index = 0
 
+    def set_dict(self, params):
+        for key, value in params.items():
+            setattr(self, key, value)
+
     def getWallDistances(self, world):
         wall_dists = [self.speed for _ in BASEDIRS]
         tileX, tileY = self.rect.x, self.rect.y
@@ -90,31 +94,34 @@ class CustomAStarChaser(RandomNPC):
 
             return next_cords
 
-    def searchUpdate(self, game, goal_cords):
+    def positionUpdate(self, next_cords):
+        nextX, nextY = next_cords
+        nowX, nowY = self.world.get_sprite_tile_position(self)
+
+        diffX = abs(nextX - nowX)
+        diffY = abs(nextY - nowY)
+
+        if nowX == nextX:
+            if nextY > nowY:
+                movement = DOWN
+            else:
+                movement = UP
+        else:
+            if nextX > nowX:
+                movement = RIGHT
+            else:
+                movement = LEFT
+        
+        self.orientation = movement
+        self._update_position(movement, speed=diffX+diffY)
+
+    def AstarUpdate(self, game, goal_cords):
 
         path = self.AstarPath(game, self, goal_cords)
 
-        if path and len(path)>1:
+        if path and len(path)>1 and self.next_cords == None:
 
-            nextX, nextY = path[1]
-            nowX, nowY = self.world.get_sprite_tile_position(self)
-
-            diffX = abs(nextX - nowX)
-            diffY = abs(nextY - nowY)
-
-            if nowX == nextX:
-                if nextY > nowY:
-                    movement = DOWN
-                else:
-                    movement = UP
-            else:
-                if nextX > nowX:
-                    movement = RIGHT
-                else:
-                    movement = LEFT
-            
-            self.orientation = movement
-            self._update_position(movement, speed=diffX+diffY)
+            self.positionUpdate(path[1])
 
     def _boundedCords(self, game, x, y):
         bounded_x, bounded_y = game.width, game.height
@@ -192,7 +199,8 @@ class CustomAStarChaser(RandomNPC):
         # handle walls blocking vision
         matrix = self.addWalls(game, matrix)
 
-        if self.hearing:
+        moved = self.player_sprite.lastrect != self.player_sprite.rect
+        if self.hearing and moved:
             # add hearing limit (default)
             aboveCords = self._boundedCords(game, x+self.hearing_limit+1, y+self.hearing_limit+1)
             belowCords = self._boundedCords(game, x-self.hearing_limit, y-self.hearing_limit)
@@ -301,10 +309,17 @@ class CustomAStarChaser(RandomNPC):
         if best_path_pos == None: return desire_cords
         return best_path_pos
 
-    def update(self, game):
+    def update(self, game, next_cords=None):
+        # if testing while searching use cords from true state (next_cords)
+        # set self.next_cords so that AstarSearch knows to not update position
+        self.next_cords = None
+        if next_cords:
+            self.positionUpdate(next_cords)
+            self.next_cords = next_cords
 
         self.player_sprite = game.get_sprites(self.target)[0]
         player_x, player_y = self.player_sprite.rect.x, self.player_sprite.rect.y
+        player_orientation = self.player_sprite.orientation
 
         self.world = AStarWorld(game, self.speed)
         self.findCorners(game)
@@ -317,7 +332,7 @@ class CustomAStarChaser(RandomNPC):
         # if the target is in view
         if perception_matrix[player_x, player_y] == 1:
 
-            self.current_target = (player_x, player_y)
+            self.current_target = (player_x + player_orientation[0], player_y + player_orientation[1])
 
             # infer desire if in view and has memory
             if self.tom and self.last_player_cords and self.memory:
@@ -335,7 +350,7 @@ class CustomAStarChaser(RandomNPC):
         if self.mode == ALERT:
 
             if in_view:
-                self.searchUpdate(game, self.current_target)
+                self.AstarUpdate(game, self.current_target)
             else:
 
                 self.alert_step += 1
@@ -350,11 +365,11 @@ class CustomAStarChaser(RandomNPC):
 
                 # if has current target and mem go to last location
                 if self.current_target and self.memory:
-                    self.searchUpdate(game, self.current_target)
+                    self.AstarUpdate(game, self.current_target)
 
                 # if lost but knows which goal player was headed towards => go to their goal
                 elif self.player_desire_cords and self.tom and self.memory:
-                    self.searchUpdate(game, self.player_desire_cords)
+                    self.AstarUpdate(game, self.player_desire_cords)
 
                 # if lost target, has mem, but no tom => start searching
                 elif not self.current_target and self.memory:
@@ -363,7 +378,8 @@ class CustomAStarChaser(RandomNPC):
                     next_index = np.random.choice(len(visible_indices[0]))
 
                     self.current_target = (visible_indices[0][next_index], visible_indices[1][next_index])
-                    self.searchUpdate(game, self.current_target)
+                    
+                    self.AstarUpdate(game, self.current_target)
 
 
         elif self.mode == DEFENSIVE:
@@ -375,13 +391,13 @@ class CustomAStarChaser(RandomNPC):
                 if self.home_cords == (self.rect.x, self.rect.y):
                     self.orientation = self.initial_orientation
 
-                self.searchUpdate(game, self.home_cords)
+                self.AstarUpdate(game, self.home_cords)
             
             elif self.lost_function == 'route':
                 if (self.rect.x, self.rect.y) == self.static_route[self.static_route_index]:
                     self.static_route_index = (self.static_route_index + 1) % len(self.static_route)
 
-                self.searchUpdate(game, self.static_route[self.static_route_index])
+                self.AstarUpdate(game, self.static_route[self.static_route_index])
            
             elif self.lost_function == 'stationary':
                 return
