@@ -28,7 +28,7 @@ class CustomAStarChaser(RandomNPC):
     speed = 1
     sight_limit = 25
     memory_limit = 40
-    hearing_limit = 5
+    hearing_limit = 4
     target = 'avatar'
     fleeing = False
 
@@ -68,22 +68,22 @@ class CustomAStarChaser(RandomNPC):
                     break
         return wall_dists
 
-    def AstarPath(self, game, start_sprite, goal_cords):
+    def AStarPath(self, game, start_sprite, goal_cords):
         goal_sprite = None
         max_distance = float('-Inf')
 
         for s in game.sprite_registry.sprites():
             # handle avoidance (go to opposite side of map from target)
-            if self.fleeing:
-                dist = (abs(s.rect.y - goal_cords[1]) + abs(s.rect.x - goal_cords[0]))
-                index = self.world.get_index(s.rect.x, s.rect.y)
-                # find furthest tile from target which is not a wall
-                if index not in self.world.wall_tile_indices and dist >= max_distance:
-                    max_distance = dist
-                    goal_sprite = s
-            else:
-                if goal_cords[0] == s.rect.x and goal_cords[1] == s.rect.y:
-                    goal_sprite = s
+            # if self.fleeing:
+            #     dist = (abs(s.rect.y - goal_cords[1]) + abs(s.rect.x - goal_cords[0]))
+            #     index = self.world.get_index(s.rect.x, s.rect.y)
+            #     # find furthest tile from target which is not a wall
+            #     if index not in self.world.wall_tile_indices and dist >= max_distance:
+            #         max_distance = dist
+            #         goal_sprite = s
+            # else:
+            if goal_cords[0] == s.rect.x and goal_cords[1] == s.rect.y:
+                goal_sprite = s
 
         path = self.world.getMoveFor(start_sprite, goal_sprite)
 
@@ -93,6 +93,30 @@ class CustomAStarChaser(RandomNPC):
             next_cords = [self.world.get_sprite_tile_position(move.sprite) for move in path]
 
             return next_cords
+
+    def MdpPath(self, game, goal_cords):
+        actions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+        current_cords = (self.rect.x, self.rect.y)
+
+        path = [current_cords]
+
+        while current_cords != goal_cords:
+            converted_goal_cords = int((goal_cords[1])*game.width + goal_cords[0])
+            converted_current_cords = int((current_cords[1])*game.width + current_cords[0])
+
+            # if np.all(self.policies[converted_goal_cords, :, converted_current_cords] == 0.25):
+            #     break
+
+            # TODO: add real sampling and use mdp in calculation
+            best_action = np.argmax(self.policies[converted_goal_cords, :, converted_current_cords])
+
+            action_vector = actions[best_action]
+
+            current_cords = (current_cords[0]+action_vector[0], current_cords[1]+action_vector[1])
+            path.append(current_cords)
+
+        return path
+
 
     def positionUpdate(self, next_cords):
         nextX, nextY = next_cords
@@ -104,6 +128,8 @@ class CustomAStarChaser(RandomNPC):
         if nowX == nextX:
             if nextY > nowY:
                 movement = DOWN
+            elif nextY == nowY:
+                movement = Vector2(0, 0)
             else:
                 movement = UP
         else:
@@ -115,12 +141,18 @@ class CustomAStarChaser(RandomNPC):
         self.orientation = movement
         self._update_position(movement, speed=diffX+diffY)
 
-    def AstarUpdate(self, game, goal_cords):
+    def GetPath(self, game, start_sprite, goal_cords):
+        if self.policies is not None:
+            path = self.MdpPath(game, goal_cords)
+        else:
+            path = self.AStarPath(game, start_sprite, goal_cords)
+        return path
 
-        path = self.AstarPath(game, self, goal_cords)
+    def PlanUpdate(self, game, goal_cords):
+
+        path = self.GetPath(game, self, goal_cords)
 
         if path and len(path)>1 and self.next_cords == None:
-
             self.positionUpdate(path[1])
 
     def _boundedCords(self, game, x, y):
@@ -279,19 +311,19 @@ class CustomAStarChaser(RandomNPC):
         return self.avatar_goals[best_goal]
 
     def intercept_path(self, game, desire_cords):
-        player_path = self.AstarPath(game, self.player_sprite, desire_cords)
+        player_path = self.GetPath(game, self.player_sprite, desire_cords)
         player_x, player_y = self.player_sprite.rect.x, self.player_sprite.rect.y
         min_length = float('Inf')
         min_path_diff = float('Inf')
         best_path_pos = None
 
-        sprite_to_player = self.AstarPath(game, self, (player_x, player_y))
+        sprite_to_player = self.GetPath(game, self, (player_x, player_y))
         to_player_len = len(sprite_to_player)
 
         for i in range(1, len(player_path)):
             path_pos = player_path[i]
 
-            sprite_to_path = self.AstarPath(game, self, path_pos)
+            sprite_to_path = self.GetPath(game, self, path_pos)
             sprite_path_len = len(sprite_to_path)
 
             path_len_diff = abs((i + 1) - sprite_path_len)
@@ -314,7 +346,6 @@ class CustomAStarChaser(RandomNPC):
         # set self.next_cords so that AstarSearch knows to not update position
         self.next_cords = None
         if next_cords:
-            self.positionUpdate(next_cords)
             self.next_cords = next_cords
 
         self.player_sprite = game.get_sprites(self.target)[0]
@@ -332,7 +363,15 @@ class CustomAStarChaser(RandomNPC):
         # if the target is in view
         if perception_matrix[player_x, player_y] == 1:
 
-            self.current_target = (player_x + player_orientation[0], player_y + player_orientation[1])
+            self.current_target = (player_x, player_y)
+            position_ahead = (player_x + player_orientation[0], player_y + player_orientation[1])
+            position_behind = (player_x - player_orientation[0], player_y - player_orientation[1])
+            if self.world.get_index(player_x, player_y) in self.world.wall_tile_indices:
+                self.current_target = position_behind
+            elif self.distance(position_ahead, (self.rect[0], self.rect[1])) > 1 and \
+                self.world.get_index(position_ahead[0], position_ahead[1]) not in self.world.wall_tile_indices and \
+                position_ahead[0] < game.width and position_ahead[1] < game.height:
+                self.current_target = position_ahead
 
             # infer desire if in view and has memory
             if self.tom and self.last_player_cords and self.memory:
@@ -350,7 +389,7 @@ class CustomAStarChaser(RandomNPC):
         if self.mode == ALERT:
 
             if in_view:
-                self.AstarUpdate(game, self.current_target)
+                self.PlanUpdate(game, self.current_target)
             else:
 
                 self.alert_step += 1
@@ -365,11 +404,11 @@ class CustomAStarChaser(RandomNPC):
 
                 # if has current target and mem go to last location
                 if self.current_target and self.memory:
-                    self.AstarUpdate(game, self.current_target)
+                    self.PlanUpdate(game, self.current_target)
 
                 # if lost but knows which goal player was headed towards => go to their goal
                 elif self.player_desire_cords and self.tom and self.memory:
-                    self.AstarUpdate(game, self.player_desire_cords)
+                    self.PlanUpdate(game, self.player_desire_cords)
 
                 # if lost target, has mem, but no tom => start searching
                 elif not self.current_target and self.memory:
@@ -379,7 +418,7 @@ class CustomAStarChaser(RandomNPC):
 
                     self.current_target = (visible_indices[0][next_index], visible_indices[1][next_index])
                     
-                    self.AstarUpdate(game, self.current_target)
+                    self.PlanUpdate(game, self.current_target)
 
 
         elif self.mode == DEFENSIVE:
@@ -391,16 +430,19 @@ class CustomAStarChaser(RandomNPC):
                 if self.home_cords == (self.rect.x, self.rect.y):
                     self.orientation = self.initial_orientation
 
-                self.AstarUpdate(game, self.home_cords)
+                self.PlanUpdate(game, self.home_cords)
             
             elif self.lost_function == 'route':
                 if (self.rect.x, self.rect.y) == self.static_route[self.static_route_index]:
                     self.static_route_index = (self.static_route_index + 1) % len(self.static_route)
 
-                self.AstarUpdate(game, self.static_route[self.static_route_index])
+                self.PlanUpdate(game, self.static_route[self.static_route_index])
            
             elif self.lost_function == 'stationary':
                 return
+
+        if next_cords:
+            self.positionUpdate(next_cords)
         
         
 

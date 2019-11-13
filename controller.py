@@ -3,6 +3,7 @@ from gym.envs.registration import register
 import vgdl.interfaces.gym
 from vgdl.util.humanplay.controls import VGDLControls
 from vgdl.ontology.constants import *
+from pygame.math import Vector2
 
 import numpy as np
 import itertools
@@ -28,7 +29,7 @@ reverse_action = {
 
 class Controller():
 
-	def __init__(self, position_object, sprite_params,  pref=None):
+	def __init__(self, position_object, sprite_params,  pref=None, policy_file=None):
 
 		self.positions = position_object
 
@@ -46,6 +47,11 @@ class Controller():
 		self.builder = None
 
 		self.build_map(position_object)
+
+		self.policies = None
+		if policy_file:
+			self.policies = np.load(policy_file)['arr_0']
+
 
 	def build_map(self, position_object):
 
@@ -82,20 +88,21 @@ class Controller():
 				current_pos = (sprite.rect[0], sprite.rect[1])
 
 				if not sprite.searching:
-					# backtrack avatar and sprite one step (kinda hacky)
 					self.env.step(reverse_action[action_sequence[step_i]])
 					sprite.positionUpdate((true_sequence[step_i-1][0], true_sequence[step_i-1][1]))
 					sprite.set_dict(old_dict) # bring sprite back one time step
 
 					obs, reward, done, sprite = self.env.step(action_sequence[step_i]) # redo step
 
-				elif current_pos == old_pos:
+
+				elif sprite.velocity == Vector2(0,0):
+					if debug: print('stationary 0')
 					return 0.0
 				else:
 					diff = (current_pos[0] - old_pos[0], current_pos[1] - old_pos[1])
 					if old_diff and diff != old_diff:
 						prob_multiplier = np.log(1/3.0)
-						if debug: print('.')
+						if debug: print('1/3')
 
 					old_diff = diff
 
@@ -107,7 +114,7 @@ class Controller():
 					sprite.positionUpdate((true_sequence[step_i][0], true_sequence[step_i][1]))
 					prob += np.log(1/3.0)
 					old_pos = (obs[0], obs[1])
-					if debug: print('.')
+					if debug: print('1/3')
 					continue
 			
 			old_pos = (obs[0], obs[1])
@@ -118,12 +125,13 @@ class Controller():
 			if (true_sequence[step_i] == obs).all():
 				prob += prob_multiplier
 			else:
+				if debug: print('missmatch 0')
 				return 0.0
 
 			if step_i == len(action_sequence) - 1:
 				break
 
-
+		if debug: print('match ' + str(np.exp(prob)))
 		return np.exp(prob)
 
 
@@ -214,6 +222,7 @@ class Controller():
 			home_cords = home
 			static_route = route
 			static_route_index = 0
+			policies = self.policies
 
 		return CustomNPC
 

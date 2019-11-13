@@ -1,5 +1,6 @@
 #!/usr/bin/env python
-
+import argparse
+import glob
 import itertools
 import numpy as np
 from collections import defaultdict
@@ -22,12 +23,19 @@ sprite_iterator = itertools.product(*parameters)
 param_counter = [defaultdict(lambda: 0) for _ in parameters]
 sprite_counter = defaultdict(lambda: 0) 
 
-positions = {'A': (3, 3), '0': (22, 13)}
-true_sprite_params = ('route', False, True, True, True)
+positions = {'A': (8, 3), '0': (22, 13)} 
+true_sprite_params = ('home', False, True, True, True)
 
+controller = Controller(positions, true_sprite_params, policy_file="offline_policies.npz")
 
-controller = Controller(positions, true_sprite_params)
-search_controller = Controller(positions, true_sprite_params, pref="search")
+def load_trial(trial_name):
+    gif_filename = glob.glob('./trials/%s/*.gif' % trial_name)[0]
+    trial_uuid = gif_filename.split('.gif')[0]
+
+    with open(trial_uuid + '.txt', "r") as f:
+        content = f.read()
+        import pdb; pdb.set_trace()
+
 
 def count_match(sprite_params, prob):
     for i, key in enumerate(sprite_params):
@@ -40,48 +48,46 @@ def marginal_prob(key, dictionary):
         return 0
     return dictionary[key] / sum(dictionary.values())
 
-def main():
+def main(trial=None):
 
     env = controller.make_env(true_sprite_params, [positions['0'], (1, 23)]) #TODO: route assumption here
 
-    action_sequence = [4, 4, 4, 4, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 4, 4, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 2, 4, 0, 0, 0, 0, 0, 2, 2, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 0, 0, 0, 0, 0]
-    state_sequence, action_sequence = controller.run_simulation(action_sequence, human=True, save=True)
+    action_sequence =  [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 4, 4, 4, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0]
 
+    # TODO: trial loader
+    # if trial != None:
+    #     load_trial(trial)
 
-    # env = controller.make_env(('stationary', False, True, False, False))
-    # prob1 = controller.test_sequence(action_sequence, state_sequence, True)
-    # print('break')
-    # env = controller.make_env(('home', False, True, False, False))
-    # prob2 = controller.test_sequence(action_sequence, state_sequence, True)
-
-
+    state_sequence, action_sequence = controller.run_simulation(action_sequence, human=True, save=False)
 
     print('TESTING...')
     for sprite_params in sprite_iterator:
 
+        # cant' have TOM without object perm
+        if sprite_params[1] and not sprite_params[2]:
+            continue
+
         env = controller.make_env(sprite_params)
-        prob = controller.test_sequence(action_sequence, state_sequence)
-
-        if prob > 0:
-            count_match(sprite_params, prob)
-
+        print(sprite_params)
         # if on route sample all corners and test
-        prob = controller.test_sequence(action_sequence, state_sequence)
+        
         if sprite_params[0] == 'route':
             home_cords = positions['0']
 
             corners = controller.sprite.corners
+
             for corner in corners:
 
                 env = controller.make_env(sprite_params, [home_cords, corner]) # TODO: add more with increasing waypoints
-                prob = controller.test_sequence(action_sequence, state_sequence)
+                prob = controller.test_sequence(action_sequence, state_sequence, True)
 
                 if prob > 0:
                     count_match(sprite_params, prob)
                     break
 
-        elif prob > 0:
-            count_match(sprite_params, prob)            
+        else:
+            prob = controller.test_sequence(action_sequence, state_sequence, True)
+            if prob > 0: count_match(sprite_params, prob) 
 
     print('True sprite params: ', true_sprite_params)
     print('\nPredicted sprite params:')
@@ -100,7 +106,10 @@ def main():
         print()
 
     controller.close()
-    search_controller.close()
 
 if __name__ == '__main__':
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-t', '--trial', default=None)
+    args = parser.parse_args()
+
+    main(args.trial)

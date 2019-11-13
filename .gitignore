@@ -1,4 +1,5 @@
 __pycache__
+offline_policies.npz
 env
 tmp.txt
 .DS_STORE
