@@ -98,7 +98,7 @@ def main(config):
 
             for corner in corners:
 
-                env = controller.make_env(sprite_params, [home_cords, corner]) # TODO: add more with increasing waypoints
+                env = controller.make_env(sprite_params, [home_cords, (corner[0], home_cords[1]), corner, (home_cords[0], corner[1])]) # TODO: add more with increasing waypoints
                 prob, sprite_labels = controller.test_sequence(action_sequence, state_sequence, False)
 
                 if prob > 0:
