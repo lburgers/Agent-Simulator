@@ -45,6 +45,7 @@ class CustomAStarChaser(RandomNPC):
     corners = []
     static_route = []
     static_route_index = 0
+    state = 'waiting'
 
     def set_dict(self, params):
         for key, value in params.items():
@@ -128,8 +129,8 @@ class CustomAStarChaser(RandomNPC):
         if nowX == nextX:
             if nextY > nowY:
                 movement = DOWN
-            elif nextY == nowY:
-                movement = Vector2(0, 0)
+            # elif nextY == nowY:
+                # movement = Vector2(0, 0)
             else:
                 movement = UP
         else:
@@ -150,10 +151,12 @@ class CustomAStarChaser(RandomNPC):
 
     def PlanUpdate(self, game, goal_cords):
 
-        path = self.GetPath(game, self, goal_cords)
+        self.goal_cords = goal_cords # expose goal cords for inference algorithm
 
-        if path and len(path)>1 and self.next_cords == None:
-            self.positionUpdate(path[1])
+        if self.next_cords == None:
+            path = self.GetPath(game, self, goal_cords)
+            if path and len(path)>1:
+                self.positionUpdate(path[1])
 
     def _boundedCords(self, game, x, y):
         bounded_x, bounded_y = game.width, game.height
@@ -210,23 +213,30 @@ class CustomAStarChaser(RandomNPC):
 
 
     def buildPerceptionMatrix(self, game):
+        dirs = [UP, RIGHT, DOWN, LEFT]
+        dir_idx = dirs.index(self.orientation)
+
         matrix = np.zeros((game.width, game.height))
         x, y = self.rect.x, self.rect.y
 
-        # add sight limit (default)
-        aboveCords = self._boundedCords(game, x+self.sight_limit+1, y+self.sight_limit+1)
-        belowCords = self._boundedCords(game, x-self.sight_limit, y-self.sight_limit)
-        matrix[ belowCords[0] : aboveCords[0], belowCords[1] : aboveCords[1] ] = 1
-
         if self.orientation == UP:
-            matrix[:, y+self.speed+1:] = 0
+            matrix[x, y+self.speed] = 2
         elif self.orientation == DOWN:
-            matrix[:, :y-self.speed] = 0
+            matrix[x, y-self.speed] = 2
         elif self.orientation == LEFT:
-            matrix[x+self.speed+1:, :] = 0
+            matrix[x + self.speed, y] = 2
         elif self.orientation == RIGHT:
-            matrix[:x-self.speed, :] = 0
+            matrix[x - self.speed, y] = 2
 
+        matrix = np.rot90(matrix, k=len(dirs) - (dir_idx + 1))
+
+        rot_x, rot_y = np.where(matrix == 2)
+        rot_x, rot_y = rot_x[0], rot_y[0]
+        for i in range(matrix.shape[0]):
+            for j in range(matrix.shape[1]):
+                if i <= rot_x - abs(rot_y - j):
+                    matrix[i, j] = 1
+        matrix = np.rot90(matrix, k=(dir_idx + 1))
 
         # handle walls blocking vision
         matrix = self.addWalls(game, matrix)
@@ -311,19 +321,20 @@ class CustomAStarChaser(RandomNPC):
         return self.avatar_goals[best_goal]
 
     def intercept_path(self, game, desire_cords):
-        player_path = self.GetPath(game, self.player_sprite, desire_cords)
+        # NOTE: using Astar for path intercepting
+        player_path = self.AStarPath(game, self.player_sprite, desire_cords)
         player_x, player_y = self.player_sprite.rect.x, self.player_sprite.rect.y
         min_length = float('Inf')
         min_path_diff = float('Inf')
         best_path_pos = None
 
-        sprite_to_player = self.GetPath(game, self, (player_x, player_y))
+        sprite_to_player = self.AStarPath(game, self, (player_x, player_y))
         to_player_len = len(sprite_to_player)
 
         for i in range(1, len(player_path)):
             path_pos = player_path[i]
 
-            sprite_to_path = self.GetPath(game, self, path_pos)
+            sprite_to_path = self.AStarPath(game, self, path_pos)
             sprite_path_len = len(sprite_to_path)
 
             path_len_diff = abs((i + 1) - sprite_path_len)
@@ -344,6 +355,7 @@ class CustomAStarChaser(RandomNPC):
     def update(self, game, next_cords=None):
         # if testing while searching use cords from true state (next_cords)
         # set self.next_cords so that AstarSearch knows to not update position
+        self.goal_cords = None
         self.next_cords = None
         if next_cords:
             self.next_cords = next_cords
@@ -366,6 +378,9 @@ class CustomAStarChaser(RandomNPC):
             self.current_target = (player_x, player_y)
             position_ahead = (player_x + player_orientation[0], player_y + player_orientation[1])
             position_behind = (player_x - player_orientation[0], player_y - player_orientation[1])
+
+            self.state = 'chasing'
+
             if self.world.get_index(player_x, player_y) in self.world.wall_tile_indices:
                 self.current_target = position_behind
             elif self.distance(position_ahead, (self.rect[0], self.rect[1])) > 1 and \
@@ -378,6 +393,8 @@ class CustomAStarChaser(RandomNPC):
                 self.player_desire_cords = self.infer_goal(game)
                 intercept_pos = self.intercept_path(game, self.player_desire_cords)
                 self.current_target = intercept_pos
+
+                self.state = 'intercepting'
 
             self.last_player_cords = (player_x, player_y)
             self.mode = ALERT
@@ -420,26 +437,34 @@ class CustomAStarChaser(RandomNPC):
                     
                     self.PlanUpdate(game, self.current_target)
 
+                    self.state = 'searching'
+
 
         elif self.mode == DEFENSIVE:
 
             self.searching = False
+            self.state = 'waiting'
 
             if self.lost_function == 'home':
                 # if home go to initial orientation
                 if self.home_cords == (self.rect.x, self.rect.y):
                     self.orientation = self.initial_orientation
+                else:
+                    self.state = 'returning'
 
-                self.PlanUpdate(game, self.home_cords)
+                self.goal_cords = self.home_cords
+                if self.memory: self.PlanUpdate(game, self.home_cords)
             
             elif self.lost_function == 'route':
                 if (self.rect.x, self.rect.y) == self.static_route[self.static_route_index]:
                     self.static_route_index = (self.static_route_index + 1) % len(self.static_route)
 
-                self.PlanUpdate(game, self.static_route[self.static_route_index])
+                self.goal_cords = self.static_route[self.static_route_index]
+                if self.memory: self.PlanUpdate(game, self.static_route[self.static_route_index])
            
-            elif self.lost_function == 'stationary':
-                return
+                self.state = 'patrolling'
+            # elif self.lost_function == 'stationary':
+            #     return
 
         if next_cords:
             self.positionUpdate(next_cords)

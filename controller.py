@@ -64,75 +64,92 @@ class Controller():
 		self.builder.save()
 
 
-	def test_sequence(self, action_sequence, true_sequence, debug=False):
+	def calculate_prob(self, old_pos, sprite):
+		actions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+		game_width = 24
 
-		prob = 0.0
+		conv_goal_cords = int((sprite.goal_cords[1])*game_width + sprite.goal_cords[0])
+		conv_old_cords = int((old_pos[1])*game_width + old_pos[0])
+
+		action = (sprite.rect.x - old_pos[0], sprite.rect.y - old_pos[1])
+		if action == (0,0):
+			return 1.0
+
+		action_idx = actions.index(action)
+
+		prob = self.policies[conv_goal_cords, action_idx, conv_old_cords]
+		return prob
+
+	def test_sequence(self, action_sequence, true_sequence, debug=False):
+		log_prob = 0.0
 		sprite = None
-		old_pos = None
+		old_pos = (true_sequence[0][0], true_sequence[0][1])
 		old_diff = None
+
+		states = ['searching', 'chasing', 'intercepting', 'patrolling', 'returning', 'waiting']
+		state_record = np.zeros((len(true_sequence), len(states)))
 
 		self.env.reset()
 
-		# TODO: add direction change probabilities
-
 		for step_i in itertools.count():
 
-			prob_multiplier = 0.0
+			next_cords = (true_sequence[step_i][0], true_sequence[step_i][1])
+			obs, reward, done, sprite = self.env.step(action_sequence[step_i], next_cords)
 
+			state_idx = states.index(sprite.state)
+			state_record[step_i, state_idx] = 1
 
-			if sprite and sprite.searching:
+			if done:
+				break
 
-				next_cords = (true_sequence[step_i][0], true_sequence[step_i][1])
-				old_dict = copy.deepcopy(sprite.__dict__)
-				obs, reward, done, sprite = self.env.step(action_sequence[step_i], next_cords)
-				current_pos = (sprite.rect[0], sprite.rect[1])
-
-				if not sprite.searching:
-					self.env.step(reverse_action[action_sequence[step_i]])
-					sprite.positionUpdate((true_sequence[step_i-1][0], true_sequence[step_i-1][1]))
-					sprite.set_dict(old_dict) # bring sprite back one time step
-
-					obs, reward, done, sprite = self.env.step(action_sequence[step_i]) # redo step
-
-
-				elif sprite.velocity == Vector2(0,0):
-					if debug: print('stationary 0')
-					return 0.0
+			if sprite.searching:
+				if sprite.velocity == Vector2(0,0):
+					if debug: print('stationary 0.0')
+					return 0.0, None
 				else:
-					diff = (current_pos[0] - old_pos[0], current_pos[1] - old_pos[1])
+					diff = (obs[0] - old_pos[0], obs[1] - old_pos[1])
 					if old_diff and diff != old_diff:
-						prob_multiplier = np.log(1/3.0)
+						log_prob += np.log(1/3.0)
 						if debug: print('1/3')
+					else:
+						log_prob += 0.0
 
 					old_diff = diff
 
 
 			else:
+				# if staying in the same place and no goal => perfect match
+				if sprite.goal_cords == None and (step_i == 0 or \
+									(true_sequence[step_i-1][:2] == true_sequence[step_i][:2]).all()):
 
-				obs, reward, done, sprite = self.env.step(action_sequence[step_i])
-				if sprite.searching and not done:
-					sprite.positionUpdate((true_sequence[step_i][0], true_sequence[step_i][1]))
-					prob += np.log(1/3.0)
-					old_pos = (obs[0], obs[1])
-					if debug: print('1/3')
-					continue
-			
+					if debug: print('1.0')
+					log_prob += 0.0
+
+				# if moving with no goal => mismatch and break
+				elif sprite.goal_cords == None:
+					if debug: print('missmatch_ 0')
+					return 0.0, None
+
+				# if sprite not moving but has goal elsewhere => mismatch break
+				elif sprite.goal_cords != (true_sequence[step_i][0], true_sequence[step_i][1]) and (step_i > 0 and \
+									(true_sequence[step_i-1][:2] == true_sequence[step_i][:2]).all()):
+
+					if debug: print('missmatch* 0')
+					return 0.0, None
+
+				else:
+					# calculate mdp prob
+					log_prob += np.log(self.calculate_prob(old_pos, sprite))
+					if debug: print('using mdp prob', sprite.goal_cords, np.log(self.calculate_prob(old_pos, sprite)))
+
+			if step_i == len(true_sequence) - 1:
+				break
+
 			old_pos = (obs[0], obs[1])
+			if debug: print('updating old pos', old_pos)
 
-			if done:
-				break
-
-			if (true_sequence[step_i] == obs).all():
-				prob += prob_multiplier
-			else:
-				if debug: print('missmatch 0')
-				return 0.0
-
-			if step_i == len(action_sequence) - 1:
-				break
-
-		if debug: print('match ' + str(np.exp(prob)))
-		return np.exp(prob)
+		if debug: print('match ' + str(np.exp(log_prob)))
+		return np.exp(log_prob), state_record
 
 
 		
@@ -160,7 +177,7 @@ class Controller():
 				obs, reward, done, info = self.env.step(action)
 				self.env.render()
 			else:
-				obs, reward, done, info = self.env.step(action_sequence[step_i])
+				obs, reward, done, sprite = self.env.step(action_sequence[step_i])
 				actions_used.append(action_sequence[step_i])
 
 			states = [obs] if len(states) == 0 else np.vstack((states, obs))
@@ -185,16 +202,20 @@ class Controller():
 			imageio.mimsave('./trials/%s.gif' % unique_filename, images)
 			shutil.rmtree(basedir)
 
-			self.save_log_file(unique_filename, actions_used)
+			self.save_log_file(unique_filename, actions_used, states)
 
 		return states, actions_used
 
-	def save_log_file(self, unique_filename, action_sequence):
+	def save_log_file(self, unique_filename, action_sequence, states):
 		grid_string = self.builder.grid_string()
 		action_string = str(action_sequence)
 		true_sprite_string = str(self.true_sprite_params)
 
-		full_file = '%s \n\n %s \n\n %s \n\n %s \n' % (grid_string, self.positions, true_sprite_string, action_string)
+		full_file = '%s \n\n %s \n\n %s \n\n %s \n\n %s \n' % (grid_string,
+															   self.positions,
+															   true_sprite_string,
+															   action_string,
+															   states)
 
 		with open('./trials/%s.txt' % unique_filename, 'w') as f:
 			f.write(full_file)

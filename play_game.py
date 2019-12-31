@@ -1,11 +1,15 @@
 #!/usr/bin/env python
 import argparse
-import glob
 import itertools
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import imageio
 from collections import defaultdict
 
 from controller import Controller
+from loader import Loader
 
 SAVE_GIF = True
 
@@ -23,19 +27,24 @@ sprite_iterator = itertools.product(*parameters)
 param_counter = [defaultdict(lambda: 0) for _ in parameters]
 sprite_counter = defaultdict(lambda: 0) 
 
-positions = {'A': (8, 3), '0': (22, 13)} 
-true_sprite_params = ('home', False, True, True, True)
 
-controller = Controller(positions, true_sprite_params, policy_file="offline_policies.npz")
 
-def load_trial(trial_name):
-    gif_filename = glob.glob('./trials/%s/*.gif' % trial_name)[0]
-    trial_uuid = gif_filename.split('.gif')[0]
+def plot_labels(label):
+    states = ('Searching', 'Chasing', 'Intercepting', 'Patrolling', 'Returning', 'Waiting')
+    y_pos = np.arange(len(states))
 
-    with open(trial_uuid + '.txt', "r") as f:
-        content = f.read()
-        import pdb; pdb.set_trace()
+    fig, ax = plt.subplots()
 
+    ax.bar(y_pos, label, align='center', alpha=0.5)
+    ax.set_xticklabels(states)
+    ax.set_xticks(y_pos)
+    ax.set_ylabel('Likelihood')
+    ax.set_ylim(0, 1)
+
+    fig.canvas.draw()
+    image = np.frombuffer(fig.canvas.tostring_rgb(), dtype='uint8')
+    image = image.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+    return image
 
 def count_match(sprite_params, prob):
     for i, key in enumerate(sprite_params):
@@ -48,29 +57,40 @@ def marginal_prob(key, dictionary):
         return 0
     return dictionary[key] / sum(dictionary.values())
 
-def main(trial=None):
+def main(config):
 
-    env = controller.make_env(true_sprite_params, [positions['0'], (1, 23)]) #TODO: route assumption here
+    positions = {'A': (8, 3), '0': (18, 13)} 
+    true_sprite_params = ('home', False, True, True, True)
 
     action_sequence =  [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 4, 4, 4, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0]
+    state_sequence = None
 
     # TODO: trial loader
-    # if trial != None:
-    #     load_trial(trial)
+    if config.trial != None:
+        loader = Loader(config.trial)
+        true_sprite_params = loader.true_params
+        action_sequence = loader.player_actions
+        positions = loader.locations
+        state_sequence = loader.state_sequence
+    
+    controller = Controller(positions, true_sprite_params, policy_file=config.policy)
 
-    state_sequence, action_sequence = controller.run_simulation(action_sequence, human=True, save=False)
+    if state_sequence is None or config.save:
+        env = controller.make_env(true_sprite_params, [positions['0'], (1, 23)]) #TODO: route assumption here
+        state_sequence, action_sequence = controller.run_simulation(action_sequence, human=False, save=config.save)
+
+
+    labels = np.zeros((len(state_sequence), 6))
 
     print('TESTING...')
     for sprite_params in sprite_iterator:
 
         # cant' have TOM without object perm
-        if sprite_params[1] and not sprite_params[2]:
-            continue
+        # if sprite_params[1] and not sprite_params[2]:
+        #     continue
 
         env = controller.make_env(sprite_params)
-        print(sprite_params)
         # if on route sample all corners and test
-        
         if sprite_params[0] == 'route':
             home_cords = positions['0']
 
@@ -79,20 +99,26 @@ def main(trial=None):
             for corner in corners:
 
                 env = controller.make_env(sprite_params, [home_cords, corner]) # TODO: add more with increasing waypoints
-                prob = controller.test_sequence(action_sequence, state_sequence, True)
+                prob, sprite_labels = controller.test_sequence(action_sequence, state_sequence, False)
 
                 if prob > 0:
                     count_match(sprite_params, prob)
+                    labels += sprite_labels
                     break
 
         else:
-            prob = controller.test_sequence(action_sequence, state_sequence, True)
-            if prob > 0: count_match(sprite_params, prob) 
+            prob, sprite_labels = controller.test_sequence(action_sequence, state_sequence, False)
+            if prob > 0: 
+                count_match(sprite_params, prob) 
+                labels += sprite_labels
 
     print('True sprite params: ', true_sprite_params)
     print('\nPredicted sprite params:')
+    match_count = 0
     for k, v in sprite_counter.items():
-        if v > 0: print(k, marginal_prob(k, sprite_counter))
+        if v > 0:
+            print(k, marginal_prob(k, sprite_counter))
+            match_count += 1
 
 
     print('\nMarginal probabilites:\n')
@@ -102,14 +128,21 @@ def main(trial=None):
 
             # get route prob from home and stationary
             prob = marginal_prob(key, param_counter[i])
-            print(key, ' ', prob),
+            print(key, ' $', prob, '$'),
         print()
+
+    labels /= float(match_count)
+    if config.save and config.trial:
+        imageio.mimsave('./%s_labels.gif' % config.trial, [plot_labels(l) for l in labels])
 
     controller.close()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-t', '--trial', default=None)
+    parser.add_argument('-p', '--policy', default=None)
+    parser.add_argument('--save', dest='save', action='store_true')
+    parser.set_defaults(save=False)
     args = parser.parse_args()
 
-    main(args.trial)
+    main(args)
