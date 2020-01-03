@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import os
 import argparse
 import itertools
 import numpy as np
@@ -76,8 +77,10 @@ def main(config):
     controller = Controller(positions, true_sprite_params, policy_file=config.policy)
 
     if state_sequence is None or config.save:
+        save_folder_path = './trials/%sv%s' % (config.trial, config.version)
+        os.system('mkdir %s' % save_folder_path)
         env = controller.make_env(true_sprite_params, [positions['0'], (1, 23)]) #TODO: route assumption here
-        state_sequence, action_sequence = controller.run_simulation(action_sequence, human=False, save=config.save)
+        state_sequence, action_sequence = controller.run_simulation(action_sequence, human=False, save=config.save, save_folder_path=save_folder_path)
 
 
     labels = np.zeros((len(state_sequence), 6))
@@ -112,34 +115,46 @@ def main(config):
                 count_match(sprite_params, prob) 
                 labels += sprite_labels
 
-    print('True sprite params: ', true_sprite_params)
-    print('\nPredicted sprite params:')
+    print_string = 'True sprite params: %s\n' % str(true_sprite_params)
+    print_string += '\nPredicted sprite params:\n'
+
     match_count = 0
     for k, v in sprite_counter.items():
         if v > 0:
-            print(k, marginal_prob(k, sprite_counter))
+
+            print_string += '%s  %s\n' % ( str(k), str(marginal_prob(k, sprite_counter)) )
             match_count += 1
 
 
-    print('\nMarginal probabilites:\n')
+    print_string += '\nMarginal probabilites:\n\n'
     for i, _ in enumerate(parameters):
-        print(parameter_names[i])
+        print_string += '%s\n' % parameter_names[i]
         for key in parameters[i]:
 
             # get route prob from home and stationary
             prob = marginal_prob(key, param_counter[i])
-            print(key, ' $', prob, '$'),
-        print()
+            print_string += '%s  $ %.3f $\n' % (key, prob)
+        print_string += '\n'
+
+    print(print_string)
 
     labels /= float(match_count)
     if config.save and config.trial:
-        imageio.mimsave('./%s_labels.gif' % config.trial, [plot_labels(l) for l in labels])
+        if save_folder_path:
+
+            with open("%s/%s_posteriors.txt" % (save_folder_path, config.trial), "w") as posterior_file:
+                posterior_file.write(print_string)
+
+            imageio.mimsave('%s/%s_labels.gif' % (save_folder_path, config.trial), [plot_labels(l) for l in labels])
+        else:
+            imageio.mimsave('./%s_labels.gif' % config.trial, [plot_labels(l) for l in labels])
 
     controller.close()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-t', '--trial', default=None)
+    parser.add_argument('-v', '--version', default=None)
     parser.add_argument('-p', '--policy', default=None)
     parser.add_argument('--save', dest='save', action='store_true')
     parser.set_defaults(save=False)

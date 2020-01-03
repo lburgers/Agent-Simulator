@@ -153,7 +153,7 @@ class Controller():
 
 
 		
-	def run_simulation(self, action_sequence, human=False, save=False):
+	def run_simulation(self, action_sequence, human=False, save=False, save_folder_path=None):
 		if save:
 			unique_filename = str(uuid.uuid4())
 			basedir = './trials/%s/' % unique_filename
@@ -200,11 +200,44 @@ class Controller():
 			for i in range(len(os.listdir(basedir))-1):
 				images.append(imageio.imread(basedir + '%d.png' % (i)))
 			imageio.mimsave('./trials/%s.gif' % unique_filename, images)
+			self.convert_gif_to_mp4(unique_filename, states)
 			shutil.rmtree(basedir)
 
 			self.save_log_file(unique_filename, actions_used, states)
 
+			if save_folder_path:
+				self.move_files_to_folder(unique_filename, save_folder_path)
+
 		return states, actions_used
+
+	def convert_gif_to_mp4(self, unique_filename, states):
+		fps = 10
+		os.system('ffmpeg -i ./trials/%s.gif -movflags faststart -pix_fmt yuv420p -vf \"fps=10,scale=trunc(iw/2)*2:trunc(ih/2)*2\" ./trials/video.mp4' % unique_filename)
+		os.system('ffmpeg  -i ./trials/video.mp4 -stream_loop -1 -i ./footstep.wav -shortest -map 0:v:0 -map 1:a:0 -y ./trials/video1.mp4')
+
+
+		mute_start = None
+		mute_sections = []
+		last_state = states[0]
+		for i, state in enumerate(states):
+			if (last_state[2:] == state[2:]).all() and mute_start == None:
+				mute_start = i
+			if not (last_state[2:] == state[2:]).all() and mute_start != None:
+				mute_sections.append( (mute_start, i) )
+				mute_start = None
+			last_state = state
+
+		volume_string = "volume=enable=\'between(t,%.2f,%.2f)\':volume=0"
+		mute_sections = [volume_string % (m[0]/fps, m[1]/fps) for m in mute_sections]
+		os.system('ffmpeg -i ./trials/video1.mp4 -af \"%s\" -y ./trials/video_w_sound.mp4' % ','.join(mute_sections))
+
+		os.system('rm ./trials/video.mp4')
+		os.system('rm ./trials/video1.mp4')
+
+	def move_files_to_folder(self, unique_filename, save_folder_path):
+		os.system('mv ./trials/%s.gif %s' % (unique_filename, save_folder_path))
+		os.system('mv ./trials/%s.txt %s' % (unique_filename, save_folder_path))
+		os.system('mv ./trials/video_w_sound.mp4 %s' % (save_folder_path))
 
 	def save_log_file(self, unique_filename, action_sequence, states):
 		grid_string = self.builder.grid_string()
