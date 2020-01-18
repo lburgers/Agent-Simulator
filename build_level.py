@@ -4,7 +4,7 @@ import os
 class BuildLevel:
 
 	def __init__(self, level_file):
-		self.level_name = str(uuid.uuid4())
+		self.level_name = str(uuid.uuid4()) + '.map'
 		with open(level_file, 'r') as file:
 		    content = file.read()
 		    lines = content.split('\n')
@@ -28,4 +28,4 @@ class BuildLevel:
 		tmp_file.close()
 
 	def close(self):
-		os.remove(self.level_name)
+		os.system('rm *.map')

@@ -27,7 +27,7 @@ class CustomAStarChaser(RandomNPC):
     # default
     speed = 1
     sight_limit = 25
-    memory_limit = 40
+    memory_limit = 20
     hearing_limit = 4
     target = 'avatar'
     fleeing = False
@@ -129,8 +129,8 @@ class CustomAStarChaser(RandomNPC):
         if nowX == nextX:
             if nextY > nowY:
                 movement = DOWN
-            # elif nextY == nowY:
-                # movement = Vector2(0, 0)
+            elif nextY == nowY:
+                movement = Vector2(0, 0)
             else:
                 movement = UP
         else:
@@ -139,7 +139,7 @@ class CustomAStarChaser(RandomNPC):
             else:
                 movement = LEFT
         
-        self.orientation = movement
+        if movement != Vector2(0,0): self.orientation = movement
         self._update_position(movement, speed=diffX+diffY)
 
     def GetPath(self, game, start_sprite, goal_cords):
@@ -412,6 +412,7 @@ class CustomAStarChaser(RandomNPC):
                 self.alert_step += 1
                 if not self.memory or (self.forgets and self.alert_step > self.memory_limit):
                     self.mode = DEFENSIVE
+                    self.defensive_update(game)
 
                 # if can't see real target and made it to current target => lost
                 if self.current_target == (self.rect.x, self.rect.y):
@@ -441,34 +442,36 @@ class CustomAStarChaser(RandomNPC):
 
 
         elif self.mode == DEFENSIVE:
-
-            self.searching = False
-            self.state = 'waiting'
-
-            if self.lost_function == 'home':
-                # if home go to initial orientation
-                if self.home_cords == (self.rect.x, self.rect.y):
-                    self.orientation = self.initial_orientation
-                else:
-                    self.state = 'returning'
-
-                self.goal_cords = self.home_cords
-                if self.memory: self.PlanUpdate(game, self.home_cords)
-            
-            elif self.lost_function == 'route':
-                if (self.rect.x, self.rect.y) == self.static_route[self.static_route_index]:
-                    self.static_route_index = (self.static_route_index + 1) % len(self.static_route)
-
-                self.goal_cords = self.static_route[self.static_route_index]
-                if self.memory: self.PlanUpdate(game, self.static_route[self.static_route_index])
-           
-                self.state = 'patrolling'
-            # elif self.lost_function == 'stationary':
-            #     return
+            self.defensive_update(game)
 
         if next_cords:
             self.positionUpdate(next_cords)
+
+
+    def defensive_update(self, game):
+        self.searching = False
+        self.state = 'waiting'
+
+        if self.lost_function == 'home':
+            # if home go to initial orientation
+            if self.home_cords == (self.rect.x, self.rect.y):
+                self.orientation = self.initial_orientation
+            else:
+                self.state = 'returning'
+
+            self.goal_cords = self.home_cords
+            self.PlanUpdate(game, self.home_cords)
         
+        elif self.lost_function == 'route':
+            if (self.rect.x, self.rect.y) == self.static_route[self.static_route_index]:
+                self.static_route_index = (self.static_route_index + 1) % len(self.static_route)
+
+            self.goal_cords = self.static_route[self.static_route_index]
+            self.PlanUpdate(game, self.static_route[self.static_route_index])
+        
+            self.state = 'patrolling'
+        # elif self.lost_function == 'stationary':
+        #     return        
         
 
 

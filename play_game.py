@@ -11,6 +11,8 @@ from collections import defaultdict
 
 from controller import Controller
 from loader import Loader
+from vgdl.ontology.constants import *
+
 
 SAVE_GIF = True
 
@@ -49,7 +51,10 @@ def plot_labels(label):
 
 def count_match(sprite_params, prob):
     for i, key in enumerate(sprite_params):
-        param_counter[i][key] += prob
+
+        if i != 1 or sprite_params[2] == True:
+            param_counter[i][key] += prob
+            
     sprite_counter[sprite_params] += prob
 
 def marginal_prob(key, dictionary):
@@ -61,7 +66,8 @@ def marginal_prob(key, dictionary):
 def main(config):
 
     positions = {'A': (8, 3), '0': (18, 13)} 
-    true_sprite_params = ('home', False, True, True, True)
+    home_cords = positions['0']
+    true_sprite_params = ('home', False, True, True, False)
 
     action_sequence =  [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 4, 4, 4, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0]
     state_sequence = None
@@ -73,14 +79,19 @@ def main(config):
         action_sequence = loader.player_actions
         positions = loader.locations
         state_sequence = loader.state_sequence
-    
+
     controller = Controller(positions, true_sprite_params, policy_file=config.policy)
 
-    if state_sequence is None or config.save:
+    if state_sequence is None or config.save or config.human:
+        trial = config.trial
+        if trial == None: trial = 'new'
         save_folder_path = './trials/%sv%s' % (config.trial, config.version)
         os.system('mkdir %s' % save_folder_path)
-        env = controller.make_env(true_sprite_params, [positions['0'], (1, 23)]) #TODO: route assumption here
-        state_sequence, action_sequence = controller.run_simulation(action_sequence, human=False, save=config.save, save_folder_path=save_folder_path)
+        # direction = RIGHT
+        direction = LEFT
+        if config.trial in ['4', '5_slight_diff']: direction = RIGHT
+        env = controller.make_env(true_sprite_params, [positions['0'], (1, 23)], dir=direction, memory_limit=50) #TODO: route assumption here
+        state_sequence, action_sequence = controller.run_simulation(action_sequence, human=config.human, save=config.save, save_folder_path=save_folder_path)
 
 
     labels = np.zeros((len(state_sequence), 6))
@@ -92,7 +103,6 @@ def main(config):
         # if sprite_params[1] and not sprite_params[2]:
         #     continue
 
-        env = controller.make_env(sprite_params)
         # if on route sample all corners and test
         if sprite_params[0] == 'route':
             home_cords = positions['0']
@@ -101,7 +111,7 @@ def main(config):
 
             for corner in corners:
 
-                env = controller.make_env(sprite_params, [home_cords, (corner[0], home_cords[1]), corner, (home_cords[0], corner[1])]) # TODO: add more with increasing waypoints
+                env = controller.make_env(sprite_params, [home_cords, (corner[0], home_cords[1]), corner]) # TODO: add more with increasing waypoints
                 prob, sprite_labels = controller.test_sequence(action_sequence, state_sequence, False)
 
                 if prob > 0:
@@ -110,6 +120,9 @@ def main(config):
                     break
 
         else:
+
+            # env = controller.make_env(sprite_params, [home_cords, (1, home_cords[1]), (1, 23), (home_cords[0], 23)])
+            env = controller.make_env(sprite_params)
             prob, sprite_labels = controller.test_sequence(action_sequence, state_sequence, False)
             if prob > 0: 
                 count_match(sprite_params, prob) 
@@ -157,7 +170,9 @@ if __name__ == '__main__':
     parser.add_argument('-v', '--version', default=None)
     parser.add_argument('-p', '--policy', default=None)
     parser.add_argument('--save', dest='save', action='store_true')
+    parser.add_argument('--human', dest='human', action='store_true')
     parser.set_defaults(save=False)
+    parser.set_defaults(human=False)
     args = parser.parse_args()
 
     main(args)

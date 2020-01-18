@@ -99,6 +99,8 @@ class Controller():
 			state_idx = states.index(sprite.state)
 			state_record[step_i, state_idx] = 1
 
+			diff = (obs[0] - old_pos[0], obs[1] - old_pos[1])
+
 			if done:
 				break
 
@@ -107,15 +109,11 @@ class Controller():
 					if debug: print('stationary 0.0')
 					return 0.0, None
 				else:
-					diff = (obs[0] - old_pos[0], obs[1] - old_pos[1])
 					if old_diff and diff != old_diff:
+						log_prob += 0.0
+					else:
 						log_prob += np.log(1/3.0)
 						if debug: print('1/3')
-					else:
-						log_prob += 0.0
-
-					old_diff = diff
-
 
 			else:
 				# if staying in the same place and no goal => perfect match
@@ -145,6 +143,7 @@ class Controller():
 			if step_i == len(true_sequence) - 1:
 				break
 
+			old_diff = diff
 			old_pos = (obs[0], obs[1])
 			if debug: print('updating old pos', old_pos)
 
@@ -161,24 +160,24 @@ class Controller():
 				shutil.rmtree(basedir) 
 			os.mkdir(basedir)
 
+		states = np.array([])
+		actions_used = []
 		if human:
 			controls = VGDLControls(self.env.unwrapped.get_action_meanings())
 			self.env.render('human')
-
-		states = np.array([])
 		self.env.reset()
-		actions_used = []
 		for step_i in itertools.count():
 
-			if human:
+			if human == True:
 				controls.capture_key_presses()
 				action = controls.current_action
 				actions_used.append(action)
 				obs, reward, done, info = self.env.step(action)
-				self.env.render()
+				self.env.render('human')
 			else:
 				obs, reward, done, sprite = self.env.step(action_sequence[step_i])
 				actions_used.append(action_sequence[step_i])
+				self.env.render('human')
 
 			states = [obs] if len(states) == 0 else np.vstack((states, obs))
 
@@ -193,7 +192,8 @@ class Controller():
 				break
 
 			if human:
-				time.sleep( 1/ 15.0)
+				print(obs)
+			time.sleep( 1.0 / 30.0)
 
 		if save:
 			images = []
@@ -213,31 +213,32 @@ class Controller():
 	def convert_gif_to_mp4(self, unique_filename, states):
 		fps = 10
 		os.system('ffmpeg -i ./trials/%s.gif -movflags faststart -pix_fmt yuv420p -vf \"fps=10,scale=trunc(iw/2)*2:trunc(ih/2)*2\" ./trials/video.mp4' % unique_filename)
-		os.system('ffmpeg  -i ./trials/video.mp4 -stream_loop -1 -i ./footstep.wav -shortest -map 0:v:0 -map 1:a:0 -y ./trials/video1.mp4')
+		# os.system('ffmpeg  -i ./trials/video.mp4 -stream_loop -1 -i ./footstep.wav -shortest -map 0:v:0 -map 1:a:0 -y ./trials/video1.mp4')
 
 
-		mute_start = None
-		mute_sections = []
-		last_state = states[0]
-		for i, state in enumerate(states):
-			if (last_state[2:] == state[2:]).all() and mute_start == None:
-				mute_start = i
-			if not (last_state[2:] == state[2:]).all() and mute_start != None:
-				mute_sections.append( (mute_start, i) )
-				mute_start = None
-			last_state = state
+		# mute_start = None
+		# mute_sections = []
+		# last_state = states[0]
+		# for i, state in enumerate(states):
+		# 	if (last_state[2:] == state[2:]).all() and mute_start == None:
+		# 		mute_start = i
+		# 	if not (last_state[2:] == state[2:]).all() and mute_start != None:
+		# 		mute_sections.append( (mute_start, i) )
+		# 		mute_start = None
+		# 	last_state = state
 
-		volume_string = "volume=enable=\'between(t,%.2f,%.2f)\':volume=0"
-		mute_sections = [volume_string % (m[0]/fps, m[1]/fps) for m in mute_sections]
-		os.system('ffmpeg -i ./trials/video1.mp4 -af \"%s\" -y ./trials/video_w_sound.mp4' % ','.join(mute_sections))
+		# volume_string = "volume=enable=\'between(t,%.2f,%.2f)\':volume=0"
+		# mute_sections = [volume_string % (m[0]/fps, m[1]/fps) for m in mute_sections]
+		# os.system('ffmpeg -i ./trials/video1.mp4 -af \"%s\" -y ./trials/video_w_sound.mp4' % ','.join(mute_sections))
 
-		os.system('rm ./trials/video.mp4')
-		os.system('rm ./trials/video1.mp4')
+		# os.system('rm ./trials/video.mp4')
+		# os.system('rm ./trials/video1.mp4')
 
 	def move_files_to_folder(self, unique_filename, save_folder_path):
 		os.system('mv ./trials/%s.gif %s' % (unique_filename, save_folder_path))
 		os.system('mv ./trials/%s.txt %s' % (unique_filename, save_folder_path))
-		os.system('mv ./trials/video_w_sound.mp4 %s' % (save_folder_path))
+		os.system('mv ./trials/video.mp4 %s' % (save_folder_path))
+		# os.system('mv ./trials/video_w_sound.mp4 %s' % (save_folder_path))
 
 	def save_log_file(self, unique_filename, action_sequence, states):
 		grid_string = self.builder.grid_string()
@@ -254,7 +255,7 @@ class Controller():
 			f.write(full_file)
 
 
-	def make_sprite(self, sprite_params, route, direction, home):
+	def make_sprite(self, sprite_params, route, direction, home, memory_cap):
 
 		class CustomNPC(CustomAStarChaser):
 
@@ -264,6 +265,7 @@ class Controller():
 			forgets = sprite_params[3]
 			hearing = sprite_params[4]
 			orientation = direction
+			memory_limit = memory_cap
 
 			# reset
 			mode = 'DEFENSIVE'
@@ -281,8 +283,8 @@ class Controller():
 		return CustomNPC
 
 
-	def make_env(self, sprite_params, route=[], dir=LEFT, home=None):
-		self.sprite = self.make_sprite(sprite_params, route, dir, home)
+	def make_env(self, sprite_params, route=[], dir=LEFT, home=None, memory_limit=20):
+		self.sprite = self.make_sprite(sprite_params, route, dir, home, memory_limit)
 		vgdl.registry.register(self.sprite.__name__, self.sprite)
 		env_name = self.register_vgdl_env()
 		
