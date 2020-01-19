@@ -26,13 +26,17 @@ class Loader():
 	    return content
 
 	def parse_location(self, line):
-		locations = {'A': None, '0': None}
+		locations = {'A': None, '0': None, 'X': None}
 		for key in locations.keys():
-			x_re = '\'%s\': \((.*?),' % key
-			y_re = "\'%s\': \([0-9]+, (.*?)\)" % key
-			x = int( re.findall(x_re, line)[0] )
-			y = int( re.findall(y_re, line)[0] )
-			locations[key] = (x, y)
+			try:
+				x_re = '\'%s\': \((.*?),' % key
+				y_re = "\'%s\': \([0-9]+, (.*?)\)" % key
+				x = int( re.findall(x_re, line)[0] )
+				y = int( re.findall(y_re, line)[0] )
+				locations[key] = (x, y)
+			except:
+				pass
+
 		return locations
 
 	def parse_actions(self, line):

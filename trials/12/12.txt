@@ -1,0 +1,38 @@
+True sprite params:  ('route', True, True, False, True)
+
+Predicted sprite params:
+('route', True, True, True, True) 0.27586206896551774
+('route', True, True, True, False) 0.03448275862068952
+('route', True, True, False, True) 0.27586206896551774
+('route', True, True, False, False) 0.03448275862068952
+('route', True, False, True, False) 0.01724137931034473
+('route', True, False, False, False) 0.01724137931034473
+('route', False, True, True, True) 0.1379310344827586
+('route', False, True, True, False) 0.01724137931034473
+('route', False, True, False, True) 0.1379310344827586
+('route', False, True, False, False) 0.01724137931034473
+('route', False, False, True, False) 0.01724137931034473
+('route', False, False, False, False) 0.01724137931034473
+
+Marginal probabilites:
+
+lost_types
+stationary  $ 0.0 $
+home  $ 0.0 $
+route  $ 1.0 $
+
+tom_types
+True  $ 0.6551724137931039 $
+False  $ 0.34482758620689613 $
+
+remembers_types
+True  $ 0.931034482758621 $
+False  $ 0.06896551724137892 $
+
+forget_types
+True  $ 0.5 $
+False  $ 0.5 $
+
+hearing_types
+True  $ 0.8275862068965526 $
+False  $ 0.17241379310344743 $

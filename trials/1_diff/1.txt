@@ -1,0 +1,38 @@
+pygame 1.9.6
+Hello from the pygame community. https://www.pygame.org/contribute.html
+TESTING...
+True sprite params:  ('home', False, True, False, False)
+
+Predicted sprite params:
+('stationary', False, True, True, True) 0.125
+('stationary', False, True, True, False) 0.125
+('stationary', False, True, False, True) 0.125
+('stationary', False, True, False, False) 0.125
+('home', False, True, True, True) 0.125
+('home', False, True, True, False) 0.125
+('home', False, True, False, True) 0.125
+('home', False, True, False, False) 0.125
+
+Marginal probabilites:
+
+lost_types
+stationary  $ 0.5 $
+home  $ 0.5 $
+route  $ 0.0 $
+
+tom_types
+True  $ 0.0 $
+False  $ 1.0 $
+
+remembers_types
+True  $ 1.0 $
+False  $ 0.0 $
+
+forget_types
+True  $ 0.5 $
+False  $ 0.5 $
+
+hearing_types
+True  $ 0.5 $
+False  $ 0.5 $
+

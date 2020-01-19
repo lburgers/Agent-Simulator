@@ -1,0 +1,29 @@
+True sprite params: ('home', False, True, False, False)
+
+Predicted sprite params:
+('stationary', False, True, False, False)  0.5
+('home', False, True, False, False)  0.5
+
+Marginal probabilites:
+
+lost_types
+stationary  $ 0.500 $
+home  $ 0.500 $
+route  $ 0.000 $
+
+tom_types
+True  $ 0.000 $
+False  $ 1.000 $
+
+remembers_types
+True  $ 1.000 $
+False  $ 0.000 $
+
+forget_types
+True  $ 0.000 $
+False  $ 1.000 $
+
+hearing_types
+True  $ 0.000 $
+False  $ 1.000 $
+

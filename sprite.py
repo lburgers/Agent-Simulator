@@ -231,12 +231,13 @@ class CustomAStarChaser(RandomNPC):
         matrix = np.rot90(matrix, k=len(dirs) - (dir_idx + 1))
 
         rot_x, rot_y = np.where(matrix == 2)
-        rot_x, rot_y = rot_x[0], rot_y[0]
+        rot_x, rot_y = rot_x[0] + 1, rot_y[0] # moved back one place
         for i in range(matrix.shape[0]):
             for j in range(matrix.shape[1]):
                 if i <= rot_x - abs(rot_y - j):
                     matrix[i, j] = 1
         matrix = np.rot90(matrix, k=(dir_idx + 1))
+
 
         # handle walls blocking vision
         matrix = self.addWalls(game, matrix)
@@ -409,36 +410,40 @@ class CustomAStarChaser(RandomNPC):
                 self.PlanUpdate(game, self.current_target)
             else:
 
-                self.alert_step += 1
+                if self.searching:
+                    self.alert_step += 1
+
                 if not self.memory or (self.forgets and self.alert_step > self.memory_limit):
                     self.mode = DEFENSIVE
                     self.defensive_update(game)
 
-                # if can't see real target and made it to current target => lost
-                if self.current_target == (self.rect.x, self.rect.y):
-                    self.current_target = None
-                if self.player_desire_cords == (self.rect.x, self.rect.y):
-                    self.player_desire_cords = None
+                else:
 
-                # if has current target and mem go to last location
-                if self.current_target and self.memory:
-                    self.PlanUpdate(game, self.current_target)
+                    # if can't see real target and made it to current target => lost
+                    if self.current_target == (self.rect.x, self.rect.y):
+                        self.current_target = None
+                    if self.player_desire_cords == (self.rect.x, self.rect.y):
+                        self.player_desire_cords = None
 
-                # if lost but knows which goal player was headed towards => go to their goal
-                elif self.player_desire_cords and self.tom and self.memory:
-                    self.PlanUpdate(game, self.player_desire_cords)
+                    # if has current target and mem go to last location
+                    if self.current_target and self.memory:
+                        self.PlanUpdate(game, self.current_target)
 
-                # if lost target, has mem, but no tom => start searching
-                elif not self.current_target and self.memory:
-                    self.searching = True
-                    visible_indices = np.nonzero(perception_matrix)
-                    next_index = np.random.choice(len(visible_indices[0]))
+                    # if lost but knows which goal player was headed towards => go to their goal
+                    elif self.player_desire_cords and self.tom and self.memory:
+                        self.PlanUpdate(game, self.player_desire_cords)
 
-                    self.current_target = (visible_indices[0][next_index], visible_indices[1][next_index])
-                    
-                    self.PlanUpdate(game, self.current_target)
+                    # if lost target, has mem, but no tom => start searching
+                    elif not self.current_target and self.memory:
+                        self.searching = True
+                        visible_indices = np.nonzero(perception_matrix)
+                        next_index = np.random.choice(len(visible_indices[0]))
 
-                    self.state = 'searching'
+                        self.current_target = (visible_indices[0][next_index], visible_indices[1][next_index])
+                        
+                        self.PlanUpdate(game, self.current_target)
+
+                        self.state = 'searching'
 
 
         elif self.mode == DEFENSIVE:
@@ -458,7 +463,6 @@ class CustomAStarChaser(RandomNPC):
                 self.orientation = self.initial_orientation
             else:
                 self.state = 'returning'
-
             self.goal_cords = self.home_cords
             self.PlanUpdate(game, self.home_cords)
         

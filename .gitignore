@@ -3,7 +3,8 @@ offline_policies.npz
 env
 tmp.txt
 .DS_STORE
-trials
 old_trials
 *.pyc
 .vscode/
+*.mp4
+*.gif

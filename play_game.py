@@ -65,9 +65,11 @@ def marginal_prob(key, dictionary):
 
 def main(config):
 
-    positions = {'A': (8, 3), '0': (18, 13)} 
+    positions = {'A': (8, 3), '0': (22, 13)} 
     home_cords = positions['0']
-    true_sprite_params = ('home', False, True, True, False)
+    true_sprite_params = ('route', False, True, True, False)
+    # direction = RIGHT
+    direction = LEFT
 
     action_sequence =  [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 4, 4, 4, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0]
     state_sequence = None
@@ -85,12 +87,10 @@ def main(config):
     if state_sequence is None or config.save or config.human:
         trial = config.trial
         if trial == None: trial = 'new'
-        save_folder_path = './trials/%sv%s' % (config.trial, config.version)
+        save_folder_path = './trials/%sv%s' % (trial, config.version)
         os.system('mkdir %s' % save_folder_path)
-        # direction = RIGHT
-        direction = LEFT
-        if config.trial in ['4', '5_slight_diff']: direction = RIGHT
-        env = controller.make_env(true_sprite_params, [positions['0'], (1, 23)], dir=direction, memory_limit=50) #TODO: route assumption here
+        if trial in ['4', '5_slight_diff']: direction = RIGHT
+        env = controller.make_env(true_sprite_params, [positions['0'], (1, 23)], dir=direction, memory_limit=20) #TODO: route assumption here
         state_sequence, action_sequence = controller.run_simulation(action_sequence, human=config.human, save=config.save, save_folder_path=save_folder_path)
 
 
@@ -111,7 +111,7 @@ def main(config):
 
             for corner in corners:
 
-                env = controller.make_env(sprite_params, [home_cords, (corner[0], home_cords[1]), corner]) # TODO: add more with increasing waypoints
+                env = controller.make_env(sprite_params, [home_cords, (corner[0], home_cords[1]), corner], dir=direction) # TODO: add more with increasing waypoints
                 prob, sprite_labels = controller.test_sequence(action_sequence, state_sequence, False)
 
                 if prob > 0:
@@ -122,7 +122,7 @@ def main(config):
         else:
 
             # env = controller.make_env(sprite_params, [home_cords, (1, home_cords[1]), (1, 23), (home_cords[0], 23)])
-            env = controller.make_env(sprite_params)
+            env = controller.make_env(sprite_params, dir=direction)
             prob, sprite_labels = controller.test_sequence(action_sequence, state_sequence, False)
             if prob > 0: 
                 count_match(sprite_params, prob) 

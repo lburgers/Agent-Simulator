@@ -58,8 +58,10 @@ class Controller():
 		self.builder = BuildLevel(self.level_file)
 
 		for key in position_object.keys():
+
 			cords = position_object[key]
-			self.builder.add(cords[0], cords[1], key)
+			if cords != None:
+				self.builder.add(cords[0], cords[1], key)
 
 		self.builder.save()
 
@@ -90,6 +92,7 @@ class Controller():
 		state_record = np.zeros((len(true_sequence), len(states)))
 
 		self.env.reset()
+		was_searching = False
 
 		for step_i in itertools.count():
 
@@ -116,6 +119,7 @@ class Controller():
 						if debug: print('1/3')
 
 			else:
+				# if was_searching: import pdb; pdb.set_trace()
 				# if staying in the same place and no goal => perfect match
 				if sprite.goal_cords == None and (step_i == 0 or \
 									(true_sequence[step_i-1][:2] == true_sequence[step_i][:2]).all()):
@@ -143,9 +147,10 @@ class Controller():
 			if step_i == len(true_sequence) - 1:
 				break
 
+			was_searching = sprite.searching
 			old_diff = diff
 			old_pos = (obs[0], obs[1])
-			if debug: print('updating old pos', old_pos)
+			if debug: print('updating old pos', old_pos, sprite.orientation)
 
 		if debug: print('match ' + str(np.exp(log_prob)))
 		return np.exp(log_prob), state_record
@@ -172,7 +177,7 @@ class Controller():
 				controls.capture_key_presses()
 				action = controls.current_action
 				actions_used.append(action)
-				obs, reward, done, info = self.env.step(action)
+				obs, reward, done, sprite = self.env.step(action)
 				self.env.render('human')
 			else:
 				obs, reward, done, sprite = self.env.step(action_sequence[step_i])
@@ -192,8 +197,8 @@ class Controller():
 				break
 
 			if human:
-				print(obs)
-			time.sleep( 1.0 / 30.0)
+				time.sleep( 1.0 / 20.0)
+			print(obs, sprite.alert_step)
 
 		if save:
 			images = []
