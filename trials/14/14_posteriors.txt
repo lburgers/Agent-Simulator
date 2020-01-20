@@ -1,0 +1,33 @@
+True sprite params: ('home', True, True, True, True)
+
+Predicted sprite params:
+('stationary', True, True, False, True)  0.0027137042062414917
+('stationary', True, True, False, False)  0.0027137042062414917
+('home', True, True, True, True)  0.4945725915875171
+('home', True, True, True, False)  0.4945725915875171
+('home', True, True, False, True)  0.0027137042062414917
+('home', True, True, False, False)  0.0027137042062414917
+
+Marginal probabilites:
+
+lost_types
+stationary  $ 0.005 $
+home  $ 0.995 $
+route  $ 0.000 $
+
+tom_types
+True  $ 1.000 $
+False  $ 0.000 $
+
+remembers_types
+True  $ 1.000 $
+False  $ 0.000 $
+
+forget_types
+True  $ 0.989 $
+False  $ 0.011 $
+
+hearing_types
+True  $ 0.500 $
+False  $ 0.500 $
+

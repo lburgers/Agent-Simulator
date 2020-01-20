@@ -67,9 +67,11 @@ def main(config):
 
     positions = {'A': (8, 3), '0': (22, 13)} 
     home_cords = positions['0']
-    true_sprite_params = ('route', False, True, True, False)
-    # direction = RIGHT
+    true_sprite_params = ('stationary', True, True, False, False)
+
     direction = LEFT
+    if config.dir == 'RIGHT':
+        direction = RIGHT
 
     action_sequence =  [4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 2, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0, 4, 4, 4, 2, 2, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 1, 1, 1, 1, 1, 1, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0]
     state_sequence = None
@@ -89,9 +91,9 @@ def main(config):
         if trial == None: trial = 'new'
         save_folder_path = './trials/%sv%s' % (trial, config.version)
         os.system('mkdir %s' % save_folder_path)
-        if trial in ['4', '5_slight_diff']: direction = RIGHT
+
         env = controller.make_env(true_sprite_params, [positions['0'], (1, 23)], dir=direction, memory_limit=20) #TODO: route assumption here
-        state_sequence, action_sequence = controller.run_simulation(action_sequence, human=config.human, save=config.save, save_folder_path=save_folder_path)
+        state_sequence, action_sequence = controller.run_simulation(action_sequence, state_sequence, human=config.human, save=config.save, save_folder_path=save_folder_path)
 
 
     labels = np.zeros((len(state_sequence), 6))
@@ -152,15 +154,14 @@ def main(config):
     print(print_string)
 
     labels /= float(match_count)
-    if config.save and config.trial:
-        if save_folder_path:
+    if save_folder_path:
 
-            with open("%s/%s_posteriors.txt" % (save_folder_path, config.trial), "w") as posterior_file:
-                posterior_file.write(print_string)
+        with open("%s/%s_posteriors.txt" % (save_folder_path, config.trial), "w") as posterior_file:
+            posterior_file.write(print_string)
 
-            imageio.mimsave('%s/%s_labels.gif' % (save_folder_path, config.trial), [plot_labels(l) for l in labels])
-        else:
-            imageio.mimsave('./%s_labels.gif' % config.trial, [plot_labels(l) for l in labels])
+        imageio.mimsave('%s/%s_labels.gif' % (save_folder_path, config.trial), [plot_labels(l) for l in labels])
+    else:
+        imageio.mimsave('./%s_labels.gif' % config.trial, [plot_labels(l) for l in labels])
 
     controller.close()
 
@@ -169,6 +170,7 @@ if __name__ == '__main__':
     parser.add_argument('-t', '--trial', default=None)
     parser.add_argument('-v', '--version', default=None)
     parser.add_argument('-p', '--policy', default=None)
+    parser.add_argument('-d', '--dir', default=None)
     parser.add_argument('--save', dest='save', action='store_true')
     parser.add_argument('--human', dest='human', action='store_true')
     parser.set_defaults(save=False)

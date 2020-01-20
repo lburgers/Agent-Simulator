@@ -322,9 +322,16 @@ class CustomAStarChaser(RandomNPC):
         return self.avatar_goals[best_goal]
 
     def intercept_path(self, game, desire_cords):
+
+        start_sprite = self.player_sprite
+        neighbor_sprites = self.world.neighbor_nodes_of_sprite(self.player_sprite)
+        for neighbor in neighbor_sprites:
+            if self.current_target == self.world.get_sprite_tile_position(neighbor.sprite):
+                start_sprite = neighbor.sprite
+
         # NOTE: using Astar for path intercepting
-        player_path = self.AStarPath(game, self.player_sprite, desire_cords)
-        player_x, player_y = self.player_sprite.rect.x, self.player_sprite.rect.y
+        player_path = self.AStarPath(game, start_sprite, desire_cords)
+        player_x, player_y = start_sprite.rect.x, start_sprite.rect.y
         min_length = float('Inf')
         min_path_diff = float('Inf')
         best_path_pos = None

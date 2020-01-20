@@ -157,7 +157,7 @@ class Controller():
 
 
 		
-	def run_simulation(self, action_sequence, human=False, save=False, save_folder_path=None):
+	def run_simulation(self, action_sequence, state_sequence=None, human=False, save=False, save_folder_path=None):
 		if save:
 			unique_filename = str(uuid.uuid4())
 			basedir = './trials/%s/' % unique_filename
@@ -180,7 +180,12 @@ class Controller():
 				obs, reward, done, sprite = self.env.step(action)
 				self.env.render('human')
 			else:
-				obs, reward, done, sprite = self.env.step(action_sequence[step_i])
+
+				next_cords = None
+				if state_sequence is not None and step_i < state_sequence.shape[0]:
+					next_cords = (state_sequence[step_i][0], state_sequence[step_i][1])
+
+				obs, reward, done, sprite = self.env.step(action_sequence[step_i], next_cords)
 				actions_used.append(action_sequence[step_i])
 				self.env.render('human')
 
@@ -198,7 +203,7 @@ class Controller():
 
 			if human:
 				time.sleep( 1.0 / 20.0)
-			print(obs, sprite.alert_step)
+				print(obs, sprite.state, 'target: ', sprite.current_target, "tom desire: ", sprite.player_desire_cords, sprite.searching, sprite.alert_step)
 
 		if save:
 			images = []
