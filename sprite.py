@@ -386,6 +386,7 @@ class CustomAStarChaser(RandomNPC):
             self.current_target = (player_x, player_y)
             position_ahead = (player_x + player_orientation[0], player_y + player_orientation[1])
             position_behind = (player_x - player_orientation[0], player_y - player_orientation[1])
+            moved = self.player_sprite.lastrect != self.player_sprite.rect
 
             self.state = 'chasing'
 
@@ -393,7 +394,8 @@ class CustomAStarChaser(RandomNPC):
                 self.current_target = position_behind
             elif self.distance(position_ahead, (self.rect[0], self.rect[1])) > 1 and \
                 self.world.get_index(position_ahead[0], position_ahead[1]) not in self.world.wall_tile_indices and \
-                position_ahead[0] < game.width and position_ahead[1] < game.height:
+                position_ahead[0] < game.width and position_ahead[1] < game.height and \
+                moved:
                 self.current_target = position_ahead
 
             # infer desire if in view and has memory

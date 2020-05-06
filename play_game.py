@@ -65,9 +65,9 @@ def marginal_prob(key, dictionary):
 
 def main(config):
 
-    positions = {'A': (8, 3), '0': (22, 13)} 
+    positions = {'A': (3, 2), '0': (13, 9), 'X': (13, 16)} 
     home_cords = positions['0']
-    true_sprite_params = ('stationary', True, True, False, False)
+    true_sprite_params = ('home', False, True, True, False)
 
     direction = LEFT
     if config.dir == 'RIGHT':
@@ -86,6 +86,7 @@ def main(config):
 
     controller = Controller(positions, true_sprite_params, policy_file=config.policy)
 
+    # if no state sequence generate a new video and state_sequence
     if state_sequence is None or config.save or config.human:
         trial = config.trial
         if trial == None: trial = 'new'
@@ -97,6 +98,16 @@ def main(config):
 
 
     labels = np.zeros((len(state_sequence), 6))
+    home_cords = positions['0']
+    forgetting_dist = {
+        17: 0.05,
+        18: 0.1,
+        19: 0.15,
+        20: 0.4,
+        21: 0.15,
+        22: 0.1,
+        23: 0.05,
+    }
 
     print('TESTING...')
     for sprite_params in sprite_iterator:
@@ -106,29 +117,50 @@ def main(config):
         #     continue
 
         # if on route sample all corners and test
-        if sprite_params[0] == 'route':
-            home_cords = positions['0']
+        # if sprite_params[0] == 'route':
+        #     corners = controller.sprite.corners
 
-            corners = controller.sprite.corners
+        #     for corner in corners:
 
-            for corner in corners:
+        #         env = controller.make_env(sprite_params, [home_cords, (corner[0], home_cords[1]), corner], dir=direction) # TODO: add more with increasing waypoints
+        #         prob, sprite_labels = controller.test_sequence(action_sequence, state_sequence, False)
 
-                env = controller.make_env(sprite_params, [home_cords, (corner[0], home_cords[1]), corner], dir=direction) # TODO: add more with increasing waypoints
-                prob, sprite_labels = controller.test_sequence(action_sequence, state_sequence, False)
+        #         if prob > 0:
+        #             count_match(sprite_params, prob)
+        #             labels += sprite_labels
+        #             break
 
-                if prob > 0:
-                    count_match(sprite_params, prob)
-                    labels += sprite_labels
-                    break
+        # else:
+
+        #     # env = controller.make_env(sprite_params, [home_cords, (1, home_cords[1]), (1, 23), (home_cords[0], 23)])
+        #     env = controller.make_env(sprite_params, dir=direction)
+        #     prob, sprite_labels = controller.test_sequence(action_sequence, state_sequence, False)
+        #     if prob > 0: 
+        #         count_match(sprite_params, prob) 
+        #         labels += sprite_labels
+
+
+        # if forgetting use variable memories
+        if sprite_params[3] == True:
+
+            prob = 0
+            for memory_limit in forgetting_dist.keys():
+                env = controller.make_env(sprite_params, [home_cords, (1, home_cords[1]), (1, 23)], dir=direction, memory_limit=memory_limit) 
+                p, sprite_labels = controller.test_sequence(action_sequence, state_sequence, False)
+
+                prob += forgetting_dist[memory_limit] * p
 
         else:
+            debug = False
+            # if sprite_params[1] == True:
+            #     debug = True
+            env = controller.make_env(sprite_params, [home_cords, (1, home_cords[1]), (1, 23)], dir=direction) # TODO: add more with increasing waypoints
+            prob, sprite_labels = controller.test_sequence(action_sequence, state_sequence, debug)
 
-            # env = controller.make_env(sprite_params, [home_cords, (1, home_cords[1]), (1, 23), (home_cords[0], 23)])
-            env = controller.make_env(sprite_params, dir=direction)
-            prob, sprite_labels = controller.test_sequence(action_sequence, state_sequence, False)
-            if prob > 0: 
-                count_match(sprite_params, prob) 
-                labels += sprite_labels
+        if prob > 0:
+            count_match(sprite_params, prob)
+            labels += (sprite_labels*prob)
+
 
     print_string = 'True sprite params: %s\n' % str(true_sprite_params)
     print_string += '\nPredicted sprite params:\n'
@@ -153,13 +185,19 @@ def main(config):
 
     print(print_string)
 
-    labels /= float(match_count)
+    # labels /= float(match_count)
     if save_folder_path:
 
         with open("%s/%s_posteriors.txt" % (save_folder_path, config.trial), "w") as posterior_file:
             posterior_file.write(print_string)
 
         imageio.mimsave('%s/%s_labels.gif' % (save_folder_path, config.trial), [plot_labels(l) for l in labels])
+
+        if config.label:
+            controller.convert_images_to_mp4(save_folder_path, labels)
+        else:
+            controller.convert_images_to_mp4(save_folder_path, None)
+
     else:
         imageio.mimsave('./%s_labels.gif' % config.trial, [plot_labels(l) for l in labels])
 
@@ -172,8 +210,10 @@ if __name__ == '__main__':
     parser.add_argument('-p', '--policy', default=None)
     parser.add_argument('-d', '--dir', default=None)
     parser.add_argument('--save', dest='save', action='store_true')
+    parser.add_argument('--label', dest='label', action='store_true')
     parser.add_argument('--human', dest='human', action='store_true')
     parser.set_defaults(save=False)
+    parser.set_defaults(label=False)
     parser.set_defaults(human=False)
     args = parser.parse_args()
 

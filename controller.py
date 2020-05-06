@@ -68,7 +68,7 @@ class Controller():
 
 	def calculate_prob(self, old_pos, sprite):
 		actions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
-		game_width = 24
+		game_width = self.env.game.width
 
 		conv_goal_cords = int((sprite.goal_cords[1])*game_width + sprite.goal_cords[0])
 		conv_old_cords = int((old_pos[1])*game_width + old_pos[0])
@@ -159,11 +159,11 @@ class Controller():
 		
 	def run_simulation(self, action_sequence, state_sequence=None, human=False, save=False, save_folder_path=None):
 		if save:
-			unique_filename = str(uuid.uuid4())
-			basedir = './trials/%s/' % unique_filename
-			if os.path.exists(basedir):
-				shutil.rmtree(basedir) 
-			os.mkdir(basedir)
+			self.unique_filename = str(uuid.uuid4())
+			self.basedir = './trials/%s/' % self.unique_filename
+			if os.path.exists(self.basedir):
+				shutil.rmtree(self.basedir) 
+			os.mkdir(self.basedir)
 
 		states = np.array([])
 		actions_used = []
@@ -194,7 +194,7 @@ class Controller():
 			if save:
 				rgb_array = self.env.render('rgb_array')
 				rgb_shape = rgb_array.shape
-				png.from_array(rgb_array.reshape(-1, 3*rgb_shape[1]), 'RGB').save("%s%d.png"% (basedir, step_i))
+				png.from_array(rgb_array.reshape(-1, 3*rgb_shape[1]), 'RGB').save("%s%d.png"% (self.basedir, step_i))
 
 			if done:
 				break
@@ -203,26 +203,44 @@ class Controller():
 
 			if human:
 				time.sleep( 1.0 / 20.0)
-				print(obs, sprite.state, 'target: ', sprite.current_target, "tom desire: ", sprite.player_desire_cords, sprite.searching, sprite.alert_step)
+				print(obs, sprite.state, 'target: ', sprite.goal_cords, sprite.mode, sprite.alert_step)
 
 		if save:
-			images = []
-			for i in range(len(os.listdir(basedir))-1):
-				images.append(imageio.imread(basedir + '%d.png' % (i)))
-			imageio.mimsave('./trials/%s.gif' % unique_filename, images)
-			self.convert_gif_to_mp4(unique_filename, states)
-			shutil.rmtree(basedir)
+			self.save_log_file(actions_used, states)
 
-			self.save_log_file(unique_filename, actions_used, states)
-
-			if save_folder_path:
-				self.move_files_to_folder(unique_filename, save_folder_path)
 
 		return states, actions_used
 
-	def convert_gif_to_mp4(self, unique_filename, states):
+	def convert_images_to_mp4(self, save_folder_path, labels):
+		from PIL import Image
+		from PIL import ImageFont
+		from PIL import ImageDraw 
+		states = ('Searching', 'Chasing', 'Intercepting', 'Patrolling', 'Returning', 'Waiting')
+
+		images = []
+		for i in range(len(os.listdir(self.basedir))):
+			img_name = self.basedir + '%d.png' % (i)
+
+			if labels is not None:
+				label_text = states[ np.where(labels[i] == max(labels[i]))[0][0] ]
+
+				img = Image.open(img_name)
+				draw = ImageDraw.Draw(img)
+				font = ImageFont.truetype("./font_bold.ttf", 32)
+				draw.text((400, 30), label_text, (0,0,0), font=font)
+				img.save(img_name)
+
+			images.append(imageio.imread(img_name))
+		imageio.mimsave('./trials/%s.gif' % self.unique_filename, images)
+		self.convert_gif_to_mp4()
+		shutil.rmtree(self.basedir)
+		if save_folder_path:
+			self.move_files_to_folder(save_folder_path)
+
+
+	def convert_gif_to_mp4(self):
 		fps = 10
-		os.system('ffmpeg -i ./trials/%s.gif -movflags faststart -pix_fmt yuv420p -vf \"fps=10,scale=trunc(iw/2)*2:trunc(ih/2)*2\" ./trials/video.mp4' % unique_filename)
+		os.system('ffmpeg -i ./trials/%s.gif -movflags faststart -pix_fmt yuv420p -vf \"fps=10,scale=trunc(iw/2)*2:trunc(ih/2)*2\" ./trials/video.mp4' % self.unique_filename)
 		# os.system('ffmpeg  -i ./trials/video.mp4 -stream_loop -1 -i ./footstep.wav -shortest -map 0:v:0 -map 1:a:0 -y ./trials/video1.mp4')
 
 
@@ -244,13 +262,13 @@ class Controller():
 		# os.system('rm ./trials/video.mp4')
 		# os.system('rm ./trials/video1.mp4')
 
-	def move_files_to_folder(self, unique_filename, save_folder_path):
-		os.system('mv ./trials/%s.gif %s' % (unique_filename, save_folder_path))
-		os.system('mv ./trials/%s.txt %s' % (unique_filename, save_folder_path))
+	def move_files_to_folder(self, save_folder_path):
+		os.system('mv ./trials/%s.gif %s' % (self.unique_filename, save_folder_path))
+		os.system('mv ./trials/%s.txt %s' % (self.unique_filename, save_folder_path))
 		os.system('mv ./trials/video.mp4 %s' % (save_folder_path))
 		# os.system('mv ./trials/video_w_sound.mp4 %s' % (save_folder_path))
 
-	def save_log_file(self, unique_filename, action_sequence, states):
+	def save_log_file(self, action_sequence, states):
 		grid_string = self.builder.grid_string()
 		action_string = str(action_sequence)
 		true_sprite_string = str(self.true_sprite_params)
@@ -261,7 +279,7 @@ class Controller():
 															   action_string,
 															   states)
 
-		with open('./trials/%s.txt' % unique_filename, 'w') as f:
+		with open('./trials/%s.txt' % self.unique_filename, 'w') as f:
 			f.write(full_file)
 
 
