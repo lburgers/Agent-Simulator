@@ -6,7 +6,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-v', '--version', default=None)
 args = parser.parse_args()
 
-file_names = [str(x) for x in range(0, 15)]
+file_names = [str(x) for x in range(1, 16)]
 
 posterior_keys = {
     'stationary': 1,
@@ -25,12 +25,12 @@ full_data = []
 for name in file_names:
     # name = '%sv5' % name
     direction = 'LEFT'
-    if name[0] == '3':
+    if name[0] == '2':
         direction = 'RIGHT'
     
-    # os.system('python play_game.py -t %s -v %s -p offline_policies.npz --save --dir %s' % (name, args.version, direction))
+    os.system('python play_game.py -t %s -v %s -p offline_policies.npz --save --dir %s' % (name, args.version, direction))
     # os.system('python play_game.py -t %s -v %s -p relaxed_policies.npz --save --dir %s' % (name, args.version, direction))
-    with open('./trials/%s/%sv%s_posteriors.txt' % (name, name, args.version), 'r') as f:
+    with open('./trials/%sv%s/%s_posteriors.txt' % (name, args.version, name), 'r') as f:
         content = f.read()
         splits = content.split('$')
         trial_data = [float(splits[i].strip()) for i in posterior_keys.values()]
@@ -38,4 +38,4 @@ for name in file_names:
 
 
 df = pd.DataFrame(full_data, columns = list(posterior_keys.keys()))
-df.to_csv('./trials/marginal_posterior_v8.csv')
+df.to_csv('./trials/marginal_posterior_v10.csv')

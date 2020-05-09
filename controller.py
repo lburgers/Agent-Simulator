@@ -283,7 +283,7 @@ class Controller():
 			f.write(full_file)
 
 
-	def make_sprite(self, sprite_params, route, direction, home, memory_cap):
+	def make_sprite(self, sprite_params, route, direction, home, memory_cap, hearing_cap):
 
 		class CustomNPC(CustomAStarChaser):
 
@@ -294,6 +294,7 @@ class Controller():
 			hearing = sprite_params[4]
 			orientation = direction
 			memory_limit = memory_cap
+			hearing_limit = hearing_cap
 
 			# reset
 			mode = 'DEFENSIVE'
@@ -311,8 +312,8 @@ class Controller():
 		return CustomNPC
 
 
-	def make_env(self, sprite_params, route=[], dir=LEFT, home=None, memory_limit=20):
-		self.sprite = self.make_sprite(sprite_params, route, dir, home, memory_limit)
+	def make_env(self, sprite_params, route=[], dir=LEFT, home=None, memory_limit=20, hearing_limit=4):
+		self.sprite = self.make_sprite(sprite_params, route, dir, home, memory_limit, hearing_limit)
 		vgdl.registry.register(self.sprite.__name__, self.sprite)
 		env_name = self.register_vgdl_env()
 		

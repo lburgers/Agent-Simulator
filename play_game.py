@@ -52,8 +52,8 @@ def plot_labels(label):
 def count_match(sprite_params, prob):
     for i, key in enumerate(sprite_params):
 
-        if i != 1 or sprite_params[2] == True:
-            param_counter[i][key] += prob
+        # if i != 1 or sprite_params[2] == True:
+        param_counter[i][key] += prob
             
     sprite_counter[sprite_params] += prob
 
@@ -62,6 +62,9 @@ def marginal_prob(key, dictionary):
     if total == 0:
         return 0
     return dictionary[key] / sum(dictionary.values())
+
+def gaussian(x, mu, sig):
+    return 1./(np.sqrt(2.*np.pi)*sig)*np.exp(-np.power((x - mu)/sig, 2.)/2)
 
 def main(config):
 
@@ -93,69 +96,47 @@ def main(config):
         save_folder_path = './trials/%sv%s' % (trial, config.version)
         os.system('mkdir %s' % save_folder_path)
 
-        env = controller.make_env(true_sprite_params, [positions['0'], (1, 23)], dir=direction, memory_limit=20) #TODO: route assumption here
+        env = controller.make_env(true_sprite_params, [positions['0'], (1, 23)], dir=direction, memory_limit=20, hearing_limit=4) #TODO: route assumption here
         state_sequence, action_sequence = controller.run_simulation(action_sequence, state_sequence, human=config.human, save=config.save, save_folder_path=save_folder_path)
 
 
     labels = np.zeros((len(state_sequence), 6))
+
     home_cords = positions['0']
-    forgetting_dist = {
-        17: 0.05,
-        18: 0.1,
-        19: 0.15,
-        20: 0.4,
-        21: 0.15,
-        22: 0.1,
-        23: 0.05,
-    }
+
+    forgetting_dist = list(range(0, 100, 20))
+    forgetting_mean, forgetting_std = 65, 30
+    hearing_dist = list(range(1, 9, 2))
+    hearing_mean, hearing_std = 5, 2
+
 
     print('TESTING...')
     for sprite_params in sprite_iterator:
 
-        # cant' have TOM without object perm
-        # if sprite_params[1] and not sprite_params[2]:
-        #     continue
 
-        # if on route sample all corners and test
-        # if sprite_params[0] == 'route':
-        #     corners = controller.sprite.corners
+        print(sprite_params)
 
-        #     for corner in corners:
+        prob = 0
+        sprite_labels = np.zeros((len(state_sequence), 6))
+        for hearing_limit in hearing_dist:
+            for memory_limit in forgetting_dist:
 
-        #         env = controller.make_env(sprite_params, [home_cords, (corner[0], home_cords[1]), corner], dir=direction) # TODO: add more with increasing waypoints
-        #         prob, sprite_labels = controller.test_sequence(action_sequence, state_sequence, False)
+                env = controller.make_env(sprite_params,
+                                            [home_cords, (1, home_cords[1]), (1, 23)],
+                                            dir=direction,
+                                            memory_limit=memory_limit,
+                                            hearing_limit=hearing_limit
+                                        ) 
+                p, sprite_label = controller.test_sequence(action_sequence, state_sequence, False)
 
-        #         if prob > 0:
-        #             count_match(sprite_params, prob)
-        #             labels += sprite_labels
-        #             break
+                prob += gaussian(hearing_limit, hearing_mean, hearing_std) \
+                    * gaussian(memory_limit, forgetting_mean, forgetting_std) \
+                    * p
+                if sprite_label is not None:
+                    sprite_labels += gaussian(hearing_limit, hearing_mean, hearing_std) \
+                        * gaussian(memory_limit, forgetting_mean, forgetting_std) \
+                        * sprite_label
 
-        # else:
-
-        #     # env = controller.make_env(sprite_params, [home_cords, (1, home_cords[1]), (1, 23), (home_cords[0], 23)])
-        #     env = controller.make_env(sprite_params, dir=direction)
-        #     prob, sprite_labels = controller.test_sequence(action_sequence, state_sequence, False)
-        #     if prob > 0: 
-        #         count_match(sprite_params, prob) 
-        #         labels += sprite_labels
-
-
-        # if forgetting use variable memories
-        if sprite_params[3] == True:
-
-            prob = 0
-            for memory_limit in forgetting_dist.keys():
-                env = controller.make_env(sprite_params, [home_cords, (1, home_cords[1]), (1, 23)], dir=direction, memory_limit=memory_limit) 
-                p, sprite_labels = controller.test_sequence(action_sequence, state_sequence, False)
-
-                prob += forgetting_dist[memory_limit] * p
-
-        else:
-            debug = False
-            # if sprite_params[1] == True:
-            #     debug = True
-            env = controller.make_env(sprite_params, [home_cords, (1, home_cords[1]), (1, 23)], dir=direction) # TODO: add more with increasing waypoints
-            prob, sprite_labels = controller.test_sequence(action_sequence, state_sequence, debug)
 
         if prob > 0:
             count_match(sprite_params, prob)
@@ -163,14 +144,14 @@ def main(config):
 
 
     print_string = 'True sprite params: %s\n' % str(true_sprite_params)
-    print_string += '\nPredicted sprite params:\n'
+    # print_string += '\nPredicted sprite params:\n'
 
-    match_count = 0
-    for k, v in sprite_counter.items():
-        if v > 0:
+    # match_count = 0
+    # for k, v in sprite_counter.items():
+    #     if v > 0:
 
-            print_string += '%s  %s\n' % ( str(k), str(marginal_prob(k, sprite_counter)) )
-            match_count += 1
+    #         print_string += '%s  %s\n' % ( str(k), str(marginal_prob(k, sprite_counter)) )
+    #         match_count += 1
 
 
     print_string += '\nMarginal probabilites:\n\n'

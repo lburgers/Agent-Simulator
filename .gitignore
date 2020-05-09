@@ -8,3 +8,6 @@ old_trials
 .vscode/
 *.mp4
 *.gif
+*.npz
+
+trials/
